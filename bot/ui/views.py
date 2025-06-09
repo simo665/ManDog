@@ -200,9 +200,17 @@ class ItemSelectView(discord.ui.View):
         """Handle item selection."""
         item = select.values[0]
         
+        # Create listing data for next step
+        listing_data = {
+            'listing_type': self.listing_type,
+            'zone': self.zone,
+            'subcategory': self.subcategory,
+            'item': item
+        }
+        
         # Show quantity and notes modal
-        from bot.ui.modals import ListingModal
-        modal = ListingModal(self.bot, self.listing_type, self.zone, self.subcategory)
+        from bot.ui.modals import QuantityNotesModal
+        modal = QuantityNotesModal(self.bot, listing_data)
         
         await interaction.response.send_modal(modal)
 

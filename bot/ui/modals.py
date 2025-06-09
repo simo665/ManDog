@@ -125,7 +125,7 @@ class DateTimeSelectView(discord.ui.View):
         pass
 
 class ListingModal(discord.ui.Modal):
-    """Modal for creating a new listing."""
+    """Modal for creating a new listing (legacy - use QuantityNotesModal instead)."""
     
     def __init__(self, bot, listing_type: str, zone: str, subcategory: str):
         super().__init__(title=f"Create {listing_type} Listing")
@@ -134,15 +134,13 @@ class ListingModal(discord.ui.Modal):
         self.zone = zone
         self.subcategory = subcategory
         
-        # Add item selection field
-        from config.ffxi_data import get_subcategory_items
-        items = get_subcategory_items(zone, subcategory)
-        
+        # Add item selection field with proper style
         self.item_input = discord.ui.TextInput(
             label="Item Name",
-            placeholder=f"Enter item name (e.g., {items[1] if len(items) > 1 else 'item name'})",
+            placeholder="Enter item name",
             max_length=200,
-            required=True
+            required=True,
+            style=discord.TextStyle.short
         )
         
         self.add_item(self.item_input)
@@ -184,13 +182,14 @@ class QuantityNotesModal(discord.ui.Modal):
             placeholder="How many? (default: 1)",
             max_length=10,
             required=False,
-            default="1"
+            default="1",
+            style=discord.TextStyle.short
         )
         
         self.notes_input = discord.ui.TextInput(
             label="Notes (Optional)",
             placeholder="Any additional details...",
-            style=discord.TextStyle.long,
+            style=discord.TextStyle.paragraph,
             max_length=500,
             required=False
         )
