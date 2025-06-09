@@ -51,7 +51,10 @@ class DateTimeSelectView(discord.ui.View):
     async def date_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         """Handle date selection."""
         self.listing_data['date'] = select.values[0]
-        await interaction.response.defer()
+        await interaction.response.send_message(
+            f"✅ Date selected: {select.values[0]}\nNow choose a time...",
+            ephemeral=True
+        )
     
     @discord.ui.select(placeholder="Choose a time...")
     async def time_select(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -60,13 +63,19 @@ class DateTimeSelectView(discord.ui.View):
         
         # If both date and time are selected, create the listing
         if 'date' in self.listing_data and 'time' in self.listing_data:
+            await interaction.response.defer()
             await self.create_listing(interaction)
+        else:
+            await interaction.response.send_message(
+                f"✅ Time selected: {select.values[0]}\nPlease select a date first.",
+                ephemeral=True
+            )
     
     @discord.ui.button(label="Custom Time", style=discord.ButtonStyle.secondary)
     async def custom_time_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle custom time input."""
-        # Would show a modal for custom time input
-        pass
+        modal = CustomTimeModal(self.bot, self.listing_data)
+        await interaction.response.send_modal(modal)
     
     async def create_listing(self, interaction: discord.Interaction):
         """Create the final listing."""
@@ -100,23 +109,21 @@ class DateTimeSelectView(discord.ui.View):
                     scheduled_time
                 )
                 
-                await interaction.edit_original_response(embed=embed, view=None)
+                await interaction.followup.send(embed=embed, ephemeral=True)
                 
                 # Refresh marketplace embed
                 await self.refresh_marketplace_channel(interaction)
             else:
-                await interaction.edit_original_response(
-                    content="❌ Failed to create listing",
-                    embed=None,
-                    view=None
+                await interaction.followup.send(
+                    "❌ Failed to create listing",
+                    ephemeral=True
                 )
                 
         except Exception as e:
             logger.error(f"Error creating listing: {e}")
-            await interaction.edit_original_response(
-                content="❌ An error occurred while creating the listing",
-                embed=None,
-                view=None
+            await interaction.followup.send(
+                "❌ An error occurred while creating the listing",
+                ephemeral=True
             )
     
     async def refresh_marketplace_channel(self, interaction: discord.Interaction):
@@ -227,6 +234,96 @@ class QuantityNotesModal(discord.ui.Modal):
             logger.error(f"Error in quantity/notes modal submission: {e}")
             await interaction.response.send_message(
                 "❌ An error occurred while processing your listing",
+                ephemeral=True
+            )
+
+class CustomTimeModal(discord.ui.Modal):
+    """Modal for custom date and time input."""
+    
+    def __init__(self, bot, listing_data: Dict[str, Any]):
+        super().__init__(title="Custom Date and Time")
+        self.bot = bot
+        self.listing_data = listing_data
+        
+        self.date_input = discord.ui.TextInput(
+            label="Date (YYYY-MM-DD)",
+            placeholder="2024-12-25",
+            max_length=10,
+            required=True,
+            style=discord.TextStyle.short
+        )
+        
+        self.time_input = discord.ui.TextInput(
+            label="Time (HH:MM)",
+            placeholder="14:30",
+            max_length=5,
+            required=True,
+            style=discord.TextStyle.short
+        )
+        
+        self.add_item(self.date_input)
+        self.add_item(self.time_input)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle custom time submission."""
+        try:
+            # Validate date format
+            from datetime import datetime
+            
+            date_str = self.date_input.value
+            time_str = self.time_input.value
+            
+            # Try to parse the datetime
+            datetime_str = f"{date_str} {time_str}"
+            scheduled_time = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
+            
+            # Check if it's in the future
+            if scheduled_time <= datetime.now():
+                await interaction.response.send_message(
+                    "❌ Please select a future date and time",
+                    ephemeral=True
+                )
+                return
+            
+            # Store listing in database
+            listing_id = await self.bot.db_manager.create_listing(
+                user_id=interaction.user.id,
+                guild_id=interaction.guild.id,
+                listing_type=self.listing_data['listing_type'],
+                zone=self.listing_data['zone'],
+                subcategory=self.listing_data['subcategory'],
+                item=self.listing_data['item'],
+                quantity=self.listing_data['quantity'],
+                notes=self.listing_data['notes'],
+                scheduled_time=scheduled_time
+            )
+            
+            if listing_id:
+                # Send confirmation
+                from bot.ui.embeds import MarketplaceEmbeds
+                embeds = MarketplaceEmbeds()
+                embed = embeds.create_listing_confirmation_embed(
+                    self.listing_data['listing_type'],
+                    self.listing_data['item'],
+                    scheduled_time
+                )
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    "❌ Failed to create listing",
+                    ephemeral=True
+                )
+                
+        except ValueError as e:
+            await interaction.response.send_message(
+                "❌ Invalid date/time format. Please use YYYY-MM-DD for date and HH:MM for time",
+                ephemeral=True
+            )
+        except Exception as e:
+            logger.error(f"Error in custom time modal: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while creating the listing",
                 ephemeral=True
             )
 
