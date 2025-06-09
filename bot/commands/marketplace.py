@@ -23,7 +23,7 @@ class MarketplaceCommands(commands.Cog):
     
     @app_commands.command(name="marketplace", description="Initialize the marketplace system")
     @app_commands.describe(setup="Set up marketplace categories and channels")
-    async def marketplace(self, interaction: discord.Interaction, setup: bool = False):
+    async def marketplace(self, interaction: discord.Interaction, setup: bool):
         """Main marketplace command."""
         
         # Check if user is admin
@@ -70,12 +70,6 @@ class MarketplaceCommands(commands.Cog):
                 guild.id
             )
             
-            if existing_config and existing_config[0]['setup_complete']:
-                await interaction.followup.send(
-                    "✅ Marketplace is already set up for this server!",
-                    ephemeral=True
-                )
-                return
             
             # Categories to create
             categories_data = [
@@ -98,7 +92,7 @@ class MarketplaceCommands(commands.Cog):
                 # Create channels in category
                 for channel_name in channel_names:
                     channel = await guild.create_text_channel(
-                        name=f"{emoji}-{channel_name}",
+                        name=f"{emoji}{channel_name}",
                         category=category,
                         topic=f"Marketplace for {channel_name} content",
                         reason="Marketplace setup by Mandok bot"
