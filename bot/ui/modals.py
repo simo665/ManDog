@@ -111,14 +111,8 @@ class DateTimeSelectView(discord.ui.View):
                 
                 await interaction.followup.send(embed=embed, ephemeral=True)
                 
-                # Refresh marketplace embed using marketplace service
-                from bot.services.marketplace import MarketplaceService
-                marketplace_service = MarketplaceService(self.bot)
-                await marketplace_service.refresh_marketplace_embeds_for_zone(
-                    interaction.guild.id,
-                    self.listing_data['listing_type'],
-                    self.listing_data['zone']
-                )
+                # Refresh marketplace embed
+                await self.refresh_marketplace_channel(interaction)
             else:
                 await interaction.followup.send(
                     "❌ Failed to create listing",
@@ -315,15 +309,6 @@ class CustomTimeModal(discord.ui.Modal):
                 )
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
-                
-                # Refresh marketplace embed using marketplace service
-                from bot.services.marketplace import MarketplaceService
-                marketplace_service = MarketplaceService(self.bot)
-                await marketplace_service.refresh_marketplace_embeds_for_zone(
-                    interaction.guild.id,
-                    self.listing_data['listing_type'],
-                    self.listing_data['zone']
-                )
             else:
                 await interaction.response.send_message(
                     "❌ Failed to create listing",

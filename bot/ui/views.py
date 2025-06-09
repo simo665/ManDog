@@ -89,18 +89,6 @@ class MarketplaceView(discord.ui.View):
         try:
             # Check if interaction is already acknowledged
             if interaction.response.is_done():
-                await interaction.followup.send(
-                    "❌ Interaction has expired. Please try again.",
-                    ephemeral=True
-                )
-                return
-            
-            # Validate zone name
-            if not self.zone or self.zone == "unknown":
-                await interaction.response.send_message(
-                    "❌ Invalid zone configuration. Please contact an administrator.",
-                    ephemeral=True
-                )
                 return
                 
             # Get subcategories for this zone
@@ -124,23 +112,13 @@ class MarketplaceView(discord.ui.View):
             
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
             
-        except discord.errors.NotFound:
-            logger.warning("Interaction not found - likely expired")
-        except discord.errors.HTTPException as e:
-            if "already been acknowledged" in str(e):
-                logger.warning("Interaction already acknowledged")
-            else:
-                logger.error(f"HTTP error in listing flow: {e}")
         except Exception as e:
             logger.error(f"Error starting listing flow: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "❌ An error occurred while starting the listing process",
-                        ephemeral=True
-                    )
-            except:
-                pass
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ An error occurred while starting the listing process",
+                    ephemeral=True
+                )
     
     async def update_embed(self, interaction: discord.Interaction):
         """Update the marketplace embed with current page."""
@@ -169,18 +147,6 @@ class MarketplaceView(discord.ui.View):
         try:
             # Check if interaction is already acknowledged
             if interaction.response.is_done():
-                await interaction.followup.send(
-                    "❌ Interaction has expired. Please try again.",
-                    ephemeral=True
-                )
-                return
-            
-            # Validate zone name
-            if not self.zone or self.zone == "unknown":
-                await interaction.response.send_message(
-                    "❌ Invalid zone configuration. Please contact an administrator.",
-                    ephemeral=True
-                )
                 return
                 
             # Get user's active listings for this zone
@@ -209,23 +175,13 @@ class MarketplaceView(discord.ui.View):
             
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
             
-        except discord.errors.NotFound:
-            logger.warning("Interaction not found - likely expired")
-        except discord.errors.HTTPException as e:
-            if "already been acknowledged" in str(e):
-                logger.warning("Interaction already acknowledged")
-            else:
-                logger.error(f"HTTP error in remove options: {e}")
         except Exception as e:
             logger.error(f"Error showing remove options: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "❌ An error occurred while loading your listings",
-                        ephemeral=True
-                    )
-            except:
-                pass
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ An error occurred while loading your listings",
+                    ephemeral=True
+                )
 
 class SubcategorySelectView(discord.ui.View):
     """View for selecting subcategory."""
