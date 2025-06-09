@@ -1,7 +1,3 @@
-"""
-Marketplace commands for the bot.
-"""
-
 import logging
 import discord
 from discord.ext import commands
@@ -82,21 +78,36 @@ class MarketplaceCommands(commands.Cog):
             
             created_channels = []
             
+            guild_categories = [category.name for category in guild.categories]
+            guild_channel_names = [channel.name for channel in guild.channels]
             for category_name, emoji in categories_data:
                 # Create category
-                category = await guild.create_category(
-                    name=category_name,
-                    reason="Marketplace setup by Mandok bot"
-                )
+                category = None
+                if not category_name in guild_categories:
+                    category = await guild.create_category(
+                        name=category_name,
+                        reason="Marketplace setup by Mandok bot"
+                    )
+                else:
+                    category = discord.utils.get(guild.categories, name=category_name)
+                
+                if not category:
+                    continue 
                 
                 # Create channels in category
                 for channel_name in channel_names:
-                    channel = await guild.create_text_channel(
-                        name=f"{emoji}{channel_name}",
-                        category=category,
-                        topic=f"Marketplace for {channel_name} content",
-                        reason="Marketplace setup by Mandok bot"
-                    )
+                    if not channel_name in guild_channel_names:
+                        channel = await guild.create_text_channel(
+                            name=f"{emoji}{channel_name}",
+                            category=category,
+                            topic=f"Marketplace for {channel_name} content",
+                            reason="Marketplace setup by Mandok bot"
+                        )
+                    else:
+                        channel = discord.utils.get(guild.channels, name=channel_name)
+                    
+                    if not channel:
+                        continue
                     
                     # Set channel permissions (read-only for @everyone)
                     await channel.set_permissions(
