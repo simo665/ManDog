@@ -64,6 +64,19 @@ class MarketplaceCommands(commands.Cog):
     async def setup_marketplace_channels(self, guild: discord.Guild, interaction: discord.Interaction):
         """Set up marketplace categories and channels."""
         try:
+            # Check if already set up
+            existing_config = await self.bot.db_manager.execute_query(
+                "SELECT setup_complete FROM guild_configs WHERE guild_id = $1",
+                guild.id
+            )
+            
+            if existing_config and existing_config[0]['setup_complete']:
+                await interaction.followup.send(
+                    "✅ Marketplace is already set up for this server!",
+                    ephemeral=True
+                )
+                return
+            
             # Categories to create
             categories_data = [
                 ("WTS - Sellers", "🔸"),
