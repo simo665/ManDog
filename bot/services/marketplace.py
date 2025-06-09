@@ -120,11 +120,6 @@ class MarketplaceService:
             )
             
             if listing_id:
-                # Refresh relevant marketplace embeds
-                await self.refresh_marketplace_embeds_for_zone(
-                    guild_id, listing_data['listing_type'], listing_data['zone']
-                )
-                
                 # Update user activity score
                 await self.update_user_activity(user_id, 'listing_created')
                 
@@ -140,9 +135,14 @@ class MarketplaceService:
     async def refresh_marketplace_embeds_for_zone(self, guild_id: int, listing_type: str, zone: str):
         """Refresh all marketplace embeds for a specific zone."""
         try:
+            # Skip invalid zones
+            if not zone or zone == "unknown":
+                logger.warning(f"Skipping refresh for invalid zone: {zone}")
+                return
+            
             # Get channel for this listing type and zone
             channels = await self.bot.db_manager.execute_query(
-                "SELECT channel_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = $2 AND zone = $3",
+                "SELECT channel_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = $2 AND zone = $3 AND zone != 'unknown'",
                 guild_id, listing_type, zone
             )
             
@@ -151,6 +151,34 @@ class MarketplaceService:
                 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embeds for zone: {e}")
+    
+    async def refresh_marketplace_embed_in_current_channel(self, interaction, listing_type: str, zone: str):
+        """Refresh the marketplace embed in the current channel where interaction happened."""
+        try:
+            # Skip invalid zones
+            if not zone or zone == "unknown":
+                logger.warning(f"Skipping refresh for invalid zone: {zone}")
+                return
+            
+            # Check if current channel is a marketplace channel
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT * FROM marketplace_channels WHERE guild_id = $1 AND channel_id = $2",
+                interaction.guild.id, interaction.channel.id
+            )
+            
+            if channel_info:
+                channel_data = channel_info[0]
+                # Only refresh if this channel matches the listing type and zone
+                if channel_data['listing_type'] == listing_type and channel_data['zone'] == zone:
+                    await self.refresh_marketplace_embed(interaction.guild.id, interaction.channel.id)
+                    logger.info(f"Refreshed marketplace embed in current channel for {zone}")
+                else:
+                    logger.info(f"Channel mismatch - expected {listing_type}/{zone}, got {channel_data['listing_type']}/{channel_data['zone']}")
+            else:
+                logger.info(f"Current channel {interaction.channel.id} is not a marketplace channel")
+                
+        except Exception as e:
+            logger.error(f"Error refreshing current channel marketplace embed: {e}")
     
     async def remove_listing(self, listing_id: int, user_id: int) -> bool:
         """Remove a marketplace listing."""
