@@ -80,9 +80,13 @@ class MandokBot(commands.Bot):
                 listing_type = channel_data['listing_type']
                 zone = channel_data['zone']
                 
-                # Create and add persistent view
-                view = MarketplaceView(self, listing_type, zone)
-                self.add_view(view)
+                # Validate zone data before creating view
+                if zone and zone != "unknown":
+                    # Create and add persistent view
+                    view = MarketplaceView(self, listing_type, zone)
+                    self.add_view(view)
+                else:
+                    logger.warning(f"Skipping invalid zone '{zone}' for channel {channel_id}")
                 
             logger.info(f"Loaded {len(marketplace_channels)} persistent marketplace views")
             
