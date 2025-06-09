@@ -301,18 +301,17 @@ class RemoveListingView(discord.ui.View):
         listing_id = int(select.values[0])
         
         try:
-            # Remove the listing from database
-            success = await self.bot.db_manager.remove_listing(listing_id, interaction.user.id)
+            # Use the marketplace service to remove the listing
+            from bot.services.marketplace import MarketplaceService
+            marketplace_service = MarketplaceService(self.bot)
+            
+            success = await marketplace_service.remove_listing(listing_id, interaction.user.id)
             
             if success:
                 await interaction.response.send_message(
                     "✅ Listing removed successfully!",
                     ephemeral=True
                 )
-                
-                # Update the marketplace embed
-                # This would trigger a refresh of the marketplace channel
-                await self.refresh_marketplace_embed(interaction)
             else:
                 await interaction.response.send_message(
                     "❌ Could not remove listing. It may have already been removed.",
@@ -328,7 +327,24 @@ class RemoveListingView(discord.ui.View):
     
     async def refresh_marketplace_embed(self, interaction: discord.Interaction):
         """Refresh the marketplace embed in the channel."""
-        # This would be implemented to update the main marketplace message
-        pass
+        try:
+            # Get the marketplace service
+            from bot.services.marketplace import MarketplaceService
+            marketplace_service = MarketplaceService(self.bot)
+            
+            # Find the marketplace channel for this guild and zone
+            marketplace_channels = await self.bot.db_manager.execute_query(
+                "SELECT channel_id FROM marketplace_channels WHERE guild_id = $1",
+                interaction.guild.id
+            )
+            
+            # Refresh all marketplace embeds
+            for channel_data in marketplace_channels:
+                await marketplace_service.refresh_marketplace_embed(
+                    interaction.guild.id, channel_data['channel_id']
+                )
+                
+        except Exception as e:
+            logger.error(f"Error refreshing marketplace embed: {e}")
 
 # DateTimeSelectView moved to modals.py to fix circular import
