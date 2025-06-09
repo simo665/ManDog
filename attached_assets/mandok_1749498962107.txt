@@ -1,0 +1,153 @@
+
+# Project Overview: Mandok - Discord Marketplace Bot for FFXI
+
+---
+
+## Purpose
+Mandok is a full-featured Discord bot designed to serve as a player-driven marketplace and party coordination system for Final Fantasy XI. It emphasizes fair player exchange (no currency), reputation-based scoring, UI-driven listings, and full moderation control. Uses PostgreSQL (via Supabase) for persistence and clean listing management.
+
+---
+
+## Core Command: `/marketplace`
+This is the main command for initializing the system.
+
+### Functionality:
+- Sends an admin-only embed panel with a Setup button.
+- Clicking Setup auto-creates:
+  - WTS - Sellers Category
+  - WTB - Buyers Category
+  - Sellers Score
+
+Each WTS/WTB category will contain five channels:
+- Sky, Sea, Dynamis, Limbus, Others
+
+Each channel is read-only and contains a persistent fancy embed with the following buttons:
+- In WTS: Add WTS / Remove WTS
+- In WTB: Add WTB / Remove WTB
+
+---
+
+## Listing Flow (Example: WTS Sea)
+1. User clicks Add WTS button
+2. Bot sends ephemeral embed:  
+   "Select the sub-category for your WTS entry in Sea"  
+   Dropdown options:
+   - All Sea Gods
+   - Jailer of Hope
+   - Jailer of Justice
+
+3. Based on selection (e.g. Jailer of Hope), bot sends:  
+   "Select an item (or 'All Items') for Jailer Of Hope"  
+   Dropdown options:
+   - All Items
+   - Hope Torque
+
+4. Modal opens:  
+   "Enter Quantity and Notes/Price"  
+   - Input: Quantity
+   - Input: Notes/Price (text)
+
+5. Embed:  
+   "Pick a date and time for your event"  
+   - Dropdown for date (today → 14 days ahead)
+   - Dropdown for time (00:00 → 23:00)
+   - Option: Custom Time opens modal for manual HH:MM
+
+6. Bot updates original listing embed in channel with the new entry
+
+7. Sends ephemeral confirmation:  
+   "WTS entry for 'Hope Torque' added on <t:1749585600:F>!"
+
+---
+
+## Features Summary
+
+### Marketplace System
+- Listings by category: Sky, Sea, Dynamis, etc.
+- Separate WTS / WTB categories
+- Organized, searchable embeds per zone
+
+### UI-Only UX
+- No text commands — full dropdown/button/modal flow
+- Multi-step embed-based user input
+- Confirmation system for every action
+
+### Reputation System
+- 1–5 stars + optional comment
+- Dual scoring: Reputation + Activity
+- Auto-role penalty for low score
+
+### Matching & Queue
+- Buyers can queue on WTS
+- Sellers can queue on WTB
+- Instant DM alert when match is found
+
+### Expiry & Reminders
+- Auto-expire listings
+- DM reminders before expiry
+- Extend button included
+
+### Admin Tools
+- Admin-only command access
+- Approve/edit user-suggested items
+- Private case channels for negative rep votes
+
+### Timezone & Party Finder
+- Each user defines GMT/NA/EU
+- Raid scheduling integrated
+- Party finder works like RaidHelper
+
+---
+
+## Functional Requirements
+
+- Persistent embed per zone/type  
+- Button/modal-based listing creation  
+- PostgreSQL persistence for listings and users  
+- Dual scoring system with public display  
+- User queueing system with notifications  
+- Expiry + extend flow  
+- Timezone awareness  
+- Admin approval/editing of user-suggested items  
+- Trade confirmation + mutual rating  
+- Scoring moderation + restricted role enforcement  
+
+---
+
+## Non-Functional Requirements
+
+- <2s response to UI interactions  
+- Flexible DB schema to add new zones/items easily  
+- Embed content should use pagination if overflowed  
+- Fully interaction-based (no slash or text commands)  
+- Secrets/environment handled via `.env` securely  
+
+---
+
+## Future Ideas
+
+- Auto role-based rewards based on reputation.  
+- Blacklist tracking for scammers.  
+- Verified seller badge system.  
+- Global stats dashboard (most listed items, top rated sellers).  
+- Friendly DM interactions.  
+- Adjust scoring system (chat channels) so that it will list users after their initial post is gone, and for certain period of time only.  
+- If user score less than "certain value" → assign role that disables posting temporarily.  
+- Queueing system for buyers that want to buy from an active WTS (and vice versa).  
+- Alert when match is found.  
+- Notification via DM on expiring items and ability to extend.  
+- Allow insertion of new items in categories via users – to be approved or slightly edited by admin.  
+- Successful transactions between sellers > buyers (on completion of posts).  
+- Define time zones for each user (GMT/EU/NA).  
+- Party Finder for content – similar to RaidHelper.  
+- Listing confirmation system → both seller and buyer confirm → optional mutual rating.  
+- Revise scoring system to 1–5 stars + optional message.
+
+---
+
+## Notes
+
+- Each content zone (e.g. WTS Sky) = 1 persistent embed listing WTS for that zone.  
+- Same for WTB (e.g. WTB Sky = 1 embed).  
+- If embed overflows due to listing count → use pagination.  
+- Party Finder should be implemented with persistent interactive embeds like RaidHelper.
