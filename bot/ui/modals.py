@@ -190,7 +190,7 @@ class QuantityNotesModal(discord.ui.Modal):
         self.notes_input = discord.ui.TextInput(
             label="Notes (Optional)",
             placeholder="Any additional details...",
-            style=discord.TextStyle.paragraph,
+            style=discord.TextStyle.long,
             max_length=500,
             required=False
         )
@@ -215,7 +215,7 @@ class QuantityNotesModal(discord.ui.Modal):
             self.listing_data['notes'] = self.notes_input.value
             
             # Show date/time selection
-            view = DateTimeSelectView(self.bot, listing_data)
+            view = DateTimeSelectView(self.bot, self.listing_data)
             embed = discord.Embed(
                 title="📅 Pick Date and Time",
                 description="Select when you want this listing to be active:",

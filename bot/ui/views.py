@@ -49,12 +49,12 @@ class MarketplaceView(discord.ui.View):
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
     
-    @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕")
+    @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", custom_id="marketplace_add")
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle add listing button."""
         await self.start_listing_flow(interaction)
     
-    @discord.ui.button(label="Remove WTS", style=discord.ButtonStyle.red, emoji="➖")
+    @discord.ui.button(label="Remove WTS", style=discord.ButtonStyle.red, emoji="➖", custom_id="marketplace_remove")
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle remove listing button."""
         await self.show_remove_options(interaction)
@@ -179,12 +179,19 @@ class ItemSelectView(discord.ui.View):
         self.zone = zone
         self.subcategory = subcategory
         
-        # Create dropdown with items
-        options = [discord.SelectOption(label="All Items", value="All Items")]
-        options.extend([
+        # Create dropdown with items (ensure unique values)
+        unique_items = []
+        seen_values = set()
+        
+        for item in items[:25]:  # Discord limit of 25 options
+            if item not in seen_values:
+                unique_items.append(item)
+                seen_values.add(item)
+        
+        options = [
             discord.SelectOption(label=item, value=item)
-            for item in items[:24]  # Discord limit
-        ])
+            for item in unique_items
+        ]
         
         self.item_select.options = options
     
@@ -194,10 +201,8 @@ class ItemSelectView(discord.ui.View):
         item = select.values[0]
         
         # Show quantity and notes modal
-        modal = QuantityNotesModal(
-            self.bot, self.listing_type, self.zone, 
-            self.subcategory, item
-        )
+        from bot.ui.modals import ListingModal
+        modal = ListingModal(self.bot, self.listing_type, self.zone, self.subcategory)
         
         await interaction.response.send_modal(modal)
 

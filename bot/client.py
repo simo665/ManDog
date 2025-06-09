@@ -55,12 +55,39 @@ class MandokBot(commands.Bot):
         logger.info(f"Bot logged in as {self.user} (ID: {self.user.id})")
         logger.info(f"Connected to {len(self.guilds)} guilds")
         
+        # Load persistent views for all marketplace channels
+        await self.load_persistent_views()
+        
         # Sync application commands
         try:
             synced = await self.tree.sync()
             logger.info(f"Synced {len(synced)} application commands")
         except Exception as e:
             logger.error(f"Failed to sync commands: {e}")
+    
+    async def load_persistent_views(self):
+        """Load persistent views for marketplace channels."""
+        try:
+            from bot.ui.views import MarketplaceView
+            
+            # Get all marketplace channels from database
+            marketplace_channels = await self.db_manager.execute_query("""
+                SELECT channel_id, listing_type, zone FROM marketplace_channels
+            """)
+            
+            for channel_data in marketplace_channels:
+                channel_id = channel_data['channel_id']
+                listing_type = channel_data['listing_type']
+                zone = channel_data['zone']
+                
+                # Create and add persistent view
+                view = MarketplaceView(self, listing_type, zone)
+                self.add_view(view)
+                
+            logger.info(f"Loaded {len(marketplace_channels)} persistent marketplace views")
+            
+        except Exception as e:
+            logger.error(f"Error loading persistent views: {e}")
     
     async def on_guild_join(self, guild: discord.Guild):
         """Called when the bot joins a new guild."""
