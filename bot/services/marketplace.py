@@ -38,8 +38,8 @@ class MarketplaceService:
             # Get active listings for this zone
             listings = await self.bot.db_manager.get_zone_listings(guild_id, listing_type, zone)
             
-            # Create updated embed
-            embed = self.embeds.create_marketplace_embed(listing_type, zone, listings)
+            # Create updated embed with pagination (start at page 0)
+            embed = self.embeds.create_marketplace_embed(listing_type, zone, listings, 0)
             
             # Get channel and message
             channel = self.bot.get_channel(channel_id)
@@ -50,9 +50,13 @@ class MarketplaceService:
             if message_id:
                 try:
                     message = await channel.fetch_message(message_id)
-                    await message.edit(embed=embed)
+                    # Create new view with updated data
+                    from bot.ui.views import MarketplaceView
+                    view = MarketplaceView(self.bot, listing_type, zone, 0)
+                    await message.edit(embed=embed, view=view)
                     logger.info(f"Updated marketplace embed in {channel.name}")
-                except:
+                except Exception as msg_error:
+                    logger.warning(f"Could not update message {message_id}: {msg_error}")
                     # Message not found, send new one
                     await self.send_new_marketplace_embed(channel, listing_type, zone)
             else:
@@ -72,9 +76,9 @@ class MarketplaceService:
                 channel.guild.id, listing_type, zone
             )
             
-            # Create embed and view
-            embed = self.embeds.create_marketplace_embed(listing_type, zone, listings)
-            view = MarketplaceView(self.bot, listing_type, zone)
+            # Create embed and view with pagination
+            embed = self.embeds.create_marketplace_embed(listing_type, zone, listings, 0)
+            view = MarketplaceView(self.bot, listing_type, zone, 0)
             
             # Send message
             message = await channel.send(embed=embed, view=view)

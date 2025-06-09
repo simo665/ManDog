@@ -88,13 +88,23 @@ class MarketplaceEmbeds:
         
         return embed
     
-    def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]]) -> discord.Embed:
-        """Create the main marketplace embed for a channel."""
+    def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]], page: int = 0) -> discord.Embed:
+        """Create the main marketplace embed for a channel with pagination."""
         title_emoji = "🔸" if listing_type == "WTS" else "🔹"
         color = self.COLORS['wts'] if listing_type == "WTS" else self.COLORS['wtb']
         
+        # Calculate pagination
+        items_per_page = 10
+        total_pages = max(1, (len(listings) + items_per_page - 1) // items_per_page)
+        page = max(0, min(page, total_pages - 1))
+        start_idx = page * items_per_page
+        end_idx = start_idx + items_per_page
+        page_listings = listings[start_idx:end_idx]
+        
+        page_info = f" (Page {page + 1}/{total_pages})" if total_pages > 1 else ""
+        
         embed = discord.Embed(
-            title=f"{title_emoji} {listing_type} - {zone.title()}",
+            title=f"{title_emoji} {listing_type} - {zone.title()}{page_info}",
             description=f"Active {listing_type} listings for {zone} content",
             color=color,
             timestamp=datetime.now(timezone.utc)
@@ -106,10 +116,16 @@ class MarketplaceEmbeds:
                 value=f"No {listing_type} listings currently available for {zone}.\nBe the first to create one!",
                 inline=False
             )
+        elif not page_listings:
+            embed.add_field(
+                name="📝 No Listings on This Page",
+                value="Use the navigation buttons to browse other pages.",
+                inline=False
+            )
         else:
             # Group listings by subcategory
             grouped = {}
-            for listing in listings:
+            for listing in page_listings:
                 subcat = listing.get('subcategory', 'Other')
                 if subcat not in grouped:
                     grouped[subcat] = []
@@ -118,31 +134,42 @@ class MarketplaceEmbeds:
             # Add fields for each subcategory
             for subcat, subcat_listings in grouped.items():
                 listing_text = []
-                for listing in subcat_listings[:5]:  # Limit to 5 per subcategory
+                for listing in subcat_listings:
                     user_mention = f"<@{listing['user_id']}>"
                     item = listing.get('item', 'All Items')
                     quantity = listing.get('quantity', 1)
                     notes = listing.get('notes', '')
+                    scheduled_time = listing.get('scheduled_time')
                     
-                    listing_line = f"• {user_mention} - {item}"
+                    # Format listing line with better organization
+                    listing_line = f"• **{item}**"
                     if quantity > 1:
-                        listing_line += f" (x{quantity})"
+                        listing_line += f" ×{quantity}"
+                    listing_line += f" - {user_mention}"
+                    
+                    # Add scheduled time if available
+                    if scheduled_time:
+                        timestamp = int(scheduled_time.timestamp()) if hasattr(scheduled_time, 'timestamp') else scheduled_time
+                        listing_line += f" <t:{timestamp}:R>"
+                    
+                    # Add notes if available (truncated)
                     if notes:
-                        listing_line += f" - {notes[:50]}{'...' if len(notes) > 50 else ''}"
+                        listing_line += f"\n  *{notes[:80]}{'...' if len(notes) > 80 else ''}*"
                     
                     listing_text.append(listing_line)
                 
-                if len(subcat_listings) > 5:
-                    listing_text.append(f"... and {len(subcat_listings) - 5} more")
-                
                 embed.add_field(
-                    name=f"📂 {subcat}",
+                    name=f"📂 {subcat} ({len(subcat_listings)} items)",
                     value="\n".join(listing_text) if listing_text else "No listings",
                     inline=False
                 )
         
+        footer_text = f"Use the buttons below to manage your {listing_type} listings"
+        if total_pages > 1:
+            footer_text += f" • Page {page + 1} of {total_pages}"
+        
         embed.set_footer(
-            text=f"Use the buttons below to manage your {listing_type} listings",
+            text=footer_text,
             icon_url="https://cdn.discordapp.com/embed/avatars/0.png"
         )
         

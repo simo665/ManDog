@@ -132,11 +132,11 @@ class MarketplaceCommands(commands.Cog):
     async def setup_channel_embed(self, channel: discord.TextChannel, listing_type: str, zone: str):
         """Set up persistent embed and buttons for a marketplace channel."""
         try:
-            # Create embed for the channel
-            embed = self.embeds.create_marketplace_embed(listing_type, zone, [])
+            # Create embed for the channel with pagination
+            embed = self.embeds.create_marketplace_embed(listing_type, zone, [], 0)
             
             # Create view with appropriate buttons
-            view = MarketplaceView(self.bot, listing_type, zone)
+            view = MarketplaceView(self.bot, listing_type, zone, 0)
             
             # Send the persistent message
             message = await channel.send(embed=embed, view=view)

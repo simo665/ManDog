@@ -38,23 +38,48 @@ class SetupView(discord.ui.View):
 class MarketplaceView(discord.ui.View):
     """Persistent view for marketplace channels."""
     
-    def __init__(self, bot, listing_type: str, zone: str):
+    def __init__(self, bot, listing_type: str, zone: str, current_page: int = 0):
         super().__init__(timeout=None)  # Persistent view
         self.bot = bot
         self.listing_type = listing_type
         self.zone = zone
+        self.current_page = current_page
         self.embeds = MarketplaceEmbeds()
         
         # Customize button labels based on type
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
     
-    @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", custom_id="marketplace_add")
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary, custom_id="marketplace_prev", row=0)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle previous page button."""
+        if self.current_page > 0:
+            self.current_page -= 1
+            await self.update_embed(interaction)
+        else:
+            await interaction.response.defer()
+    
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary, custom_id="marketplace_next", row=0)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle next page button."""
+        # Get current listings to check if there's a next page
+        listings = await self.bot.db_manager.get_zone_listings(
+            interaction.guild.id, self.listing_type, self.zone
+        )
+        max_pages = max(1, (len(listings) + 9) // 10)  # 10 items per page
+        
+        if self.current_page < max_pages - 1:
+            self.current_page += 1
+            await self.update_embed(interaction)
+        else:
+            await interaction.response.defer()
+    
+    @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", custom_id="marketplace_add", row=1)
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle add listing button."""
         await self.start_listing_flow(interaction)
     
-    @discord.ui.button(label="Remove WTS", style=discord.ButtonStyle.red, emoji="➖", custom_id="marketplace_remove")
+    @discord.ui.button(label="Remove WTS", style=discord.ButtonStyle.red, emoji="➖", custom_id="marketplace_remove", row=1)
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle remove listing button."""
         await self.show_remove_options(interaction)
@@ -62,6 +87,10 @@ class MarketplaceView(discord.ui.View):
     async def start_listing_flow(self, interaction: discord.Interaction):
         """Start the listing creation flow."""
         try:
+            # Check if interaction is already acknowledged
+            if interaction.response.is_done():
+                return
+                
             # Get subcategories for this zone
             subcategories = get_zone_subcategories(self.zone)
             
@@ -85,14 +114,41 @@ class MarketplaceView(discord.ui.View):
             
         except Exception as e:
             logger.error(f"Error starting listing flow: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while starting the listing process",
-                ephemeral=True
-            )
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ An error occurred while starting the listing process",
+                    ephemeral=True
+                )
     
+    async def update_embed(self, interaction: discord.Interaction):
+        """Update the marketplace embed with current page."""
+        try:
+            # Get current listings
+            listings = await self.bot.db_manager.get_zone_listings(
+                interaction.guild.id, self.listing_type, self.zone
+            )
+            
+            # Create updated embed
+            embed = self.embeds.create_marketplace_embed(
+                self.listing_type, self.zone, listings, self.current_page
+            )
+            
+            # Update the view with current page
+            new_view = MarketplaceView(self.bot, self.listing_type, self.zone, self.current_page)
+            
+            await interaction.response.edit_message(embed=embed, view=new_view)
+            
+        except Exception as e:
+            logger.error(f"Error updating embed: {e}")
+            await interaction.response.defer()
+
     async def show_remove_options(self, interaction: discord.Interaction):
         """Show user's listings for removal."""
         try:
+            # Check if interaction is already acknowledged
+            if interaction.response.is_done():
+                return
+                
             # Get user's active listings for this zone
             listings = await self.bot.db_manager.get_user_listings(
                 interaction.user.id,
@@ -121,10 +177,11 @@ class MarketplaceView(discord.ui.View):
             
         except Exception as e:
             logger.error(f"Error showing remove options: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while loading your listings",
-                ephemeral=True
-            )
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ An error occurred while loading your listings",
+                    ephemeral=True
+                )
 
 class SubcategorySelectView(discord.ui.View):
     """View for selecting subcategory."""
