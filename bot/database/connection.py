@@ -129,6 +129,9 @@ class DatabaseManager:
                            scheduled_time: datetime) -> Optional[int]:
         """Create a new marketplace listing."""
         try:
+            # Ensure user exists in users table first
+            await self.ensure_user_exists(user_id)
+            
             command = """
                 INSERT INTO listings (
                     user_id, guild_id, listing_type, zone, subcategory, 
@@ -139,7 +142,8 @@ class DatabaseManager:
             """
             
             created_at = datetime.now(timezone.utc)
-            expires_at = created_at.replace(day=created_at.day + 14)  # 14 days expiry
+            from datetime import timedelta
+            expires_at = created_at + timedelta(days=14)  # 14 days expiry
             
             result = await self.execute_query(
                 command, user_id, guild_id, listing_type, zone, subcategory,
@@ -344,6 +348,20 @@ class DatabaseManager:
                 'activity_score': 0
             }
     
+    async def ensure_user_exists(self, user_id: int):
+        """Ensure a user exists in the users table."""
+        try:
+            command = """
+                INSERT INTO users (user_id, created_at, updated_at)
+                VALUES ($1, $2, $2)
+                ON CONFLICT (user_id) DO NOTHING
+            """
+            await self.execute_command(command, user_id, datetime.now(timezone.utc))
+            
+        except Exception as e:
+            logger.error(f"Error ensuring user exists: {e}")
+            raise
+
     async def cleanup_guild_data(self, guild_id: int):
         """Clean up data for a guild that the bot left."""
         try:
