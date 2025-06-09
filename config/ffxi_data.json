@@ -1,0 +1,1282 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "last_updated": "2024-01-01",
+    "description": "Final Fantasy XI game data for Mandok marketplace bot",
+    "zones_count": 5,
+    "total_subcategories": 25,
+    "total_items": 200
+  },
+  "zones": {
+    "sky": {
+      "id": "sky",
+      "display_name": "Sky",
+      "description": "Tu'Lia and related sky zones",
+      "emoji": "☁️",
+      "color": "#87CEEB",
+      "subcategories": {
+        "All Sky Gods": {
+          "id": "all_sky_gods",
+          "display_name": "All Sky Gods",
+          "description": "General sky content and all gods",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All sky-related items"
+            },
+            {
+              "name": "Shura Zunari Kabuto",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Head armor from sky gods",
+              "jobs": ["SAM", "NIN"]
+            },
+            {
+              "name": "Shura Haidate",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Leg armor from sky gods",
+              "jobs": ["SAM", "NIN"]
+            },
+            {
+              "name": "Shura Togi",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Body armor from sky gods",
+              "jobs": ["SAM", "NIN"]
+            },
+            {
+              "name": "Shura Tegoshi",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Hand armor from sky gods",
+              "jobs": ["SAM", "NIN"]
+            },
+            {
+              "name": "Shura Sune-ate",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Foot armor from sky gods",
+              "jobs": ["SAM", "NIN"]
+            },
+            {
+              "name": "Haubergeon",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Legendary body armor",
+              "jobs": ["WAR", "PLD", "DRK", "BST", "SAM", "DRG"]
+            },
+            {
+              "name": "Byakko's Haidate",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Leg armor from Byakko",
+              "jobs": ["MNK", "THF", "BST", "SAM"]
+            },
+            {
+              "name": "Suzaku's Sune-ate",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Foot armor from Suzaku",
+              "jobs": ["MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN", "DRG", "SMN"]
+            },
+            {
+              "name": "Genbu's Shield",
+              "category": "shield",
+              "rarity": "rare",
+              "description": "Shield from Genbu",
+              "jobs": ["WAR", "PLD", "DRK", "BST", "SAM", "DRG"]
+            },
+            {
+              "name": "Seiryu's Kote",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Hand armor from Seiryu",
+              "jobs": ["MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN", "DRG", "SMN"]
+            },
+            {
+              "name": "Peacock Charm",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from sky gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Peacock Amulet",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from sky gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Speed Belt",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Waist accessory from sky gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Justice Badge",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Back accessory from sky gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Fortitude Torque",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from sky gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Hope Torque",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from sky gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Faith Torque",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from sky gods",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Kirin": {
+          "id": "kirin",
+          "display_name": "Kirin",
+          "description": "The supreme sky god",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Kirin-related items"
+            },
+            {
+              "name": "Shining Cloth",
+              "category": "material",
+              "rarity": "legendary",
+              "description": "Rare crafting material from Kirin"
+            },
+            {
+              "name": "Kirin's Osode",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Legendary body armor from Kirin",
+              "jobs": ["SAM"]
+            },
+            {
+              "name": "Kirin's Pole",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary polearm from Kirin",
+              "jobs": ["DRG", "SAM"]
+            }
+          ]
+        },
+        "Suzaku": {
+          "id": "suzaku",
+          "display_name": "Suzaku",
+          "description": "The vermillion bird of the south",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Suzaku-related items"
+            },
+            {
+              "name": "Suzaku's Sune-ate",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Foot armor from Suzaku",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Crimson Blade",
+              "category": "weapon",
+              "rarity": "rare",
+              "description": "Sword from Suzaku",
+              "jobs": ["WAR", "PLD", "DRK", "RDM", "THF", "BST", "BRD", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Peacock Charm",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from Suzaku",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Suzaku Feather",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Crafting material from Suzaku"
+            }
+          ]
+        },
+        "Seiryu": {
+          "id": "seiryu",
+          "display_name": "Seiryu",
+          "description": "The azure dragon of the east",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Seiryu-related items"
+            },
+            {
+              "name": "Seiryu's Kote",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Hand armor from Seiryu",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Cobalt Blade",
+              "category": "weapon",
+              "rarity": "rare",
+              "description": "Sword from Seiryu",
+              "jobs": ["WAR", "PLD", "DRK", "RDM", "THF", "BST", "BRD", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Peacock Amulet",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from Seiryu",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Seiryu Seal",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Crafting material from Seiryu"
+            }
+          ]
+        },
+        "Genbu": {
+          "id": "genbu",
+          "display_name": "Genbu",
+          "description": "The black tortoise of the north",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Genbu-related items"
+            },
+            {
+              "name": "Genbu's Shield",
+              "category": "shield",
+              "rarity": "rare",
+              "description": "Shield from Genbu",
+              "jobs": ["WAR", "PLD", "DRK", "BST", "SAM", "DRG"]
+            },
+            {
+              "name": "Amber Blade",
+              "category": "weapon",
+              "rarity": "rare",
+              "description": "Sword from Genbu",
+              "jobs": ["WAR", "PLD", "DRK", "RDM", "THF", "BST", "BRD", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Speed Belt",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Waist accessory from Genbu",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Genbu Shell",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Crafting material from Genbu"
+            }
+          ]
+        },
+        "Byakko": {
+          "id": "byakko",
+          "display_name": "Byakko",
+          "description": "The white tiger of the west",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Byakko-related items"
+            },
+            {
+              "name": "Byakko's Haidate",
+              "category": "armor",
+              "rarity": "rare",
+              "description": "Leg armor from Byakko",
+              "jobs": ["MNK", "THF", "BST", "SAM"]
+            },
+            {
+              "name": "White Blade",
+              "category": "weapon",
+              "rarity": "rare",
+              "description": "Sword from Byakko",
+              "jobs": ["WAR", "PLD", "DRK", "RDM", "THF", "BST", "BRD", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Justice Badge",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Back accessory from Byakko",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Byakko Fur",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Crafting material from Byakko"
+            }
+          ]
+        }
+      }
+    },
+    "sea": {
+      "id": "sea",
+      "display_name": "Sea",
+      "description": "Sea Serpent Grotto and Limbus zones",
+      "emoji": "🌊",
+      "color": "#006994",
+      "subcategories": {
+        "All Sea Gods": {
+          "id": "all_sea_gods",
+          "display_name": "All Sea Gods",
+          "description": "General sea content and all jailers",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All sea-related items"
+            },
+            {
+              "name": "Novio Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Brutal Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Suppanomimi",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Ethereal Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Magnetic Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Hollow Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Infernal Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Coral Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from sea gods",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Jailer of Hope": {
+          "id": "jailer_of_hope",
+          "display_name": "Jailer of Hope",
+          "description": "The keeper of hope in the sea",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Jailer of Hope items"
+            },
+            {
+              "name": "Hope Torque",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from Jailer of Hope",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Novio Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Hope",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Brutal Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Hope",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Jailer of Justice": {
+          "id": "jailer_of_justice",
+          "display_name": "Jailer of Justice",
+          "description": "The keeper of justice in the sea",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Jailer of Justice items"
+            },
+            {
+              "name": "Suppanomimi",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Justice",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Ethereal Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Justice",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Jailer of Faith": {
+          "id": "jailer_of_faith",
+          "display_name": "Jailer of Faith",
+          "description": "The keeper of faith in the sea",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Jailer of Faith items"
+            },
+            {
+              "name": "Faith Torque",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from Jailer of Faith",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Magnetic Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Faith",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Hollow Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Faith",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Jailer of Fortitude": {
+          "id": "jailer_of_fortitude",
+          "display_name": "Jailer of Fortitude",
+          "description": "The keeper of fortitude in the sea",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Jailer of Fortitude items"
+            },
+            {
+              "name": "Fortitude Torque",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Neck accessory from Jailer of Fortitude",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Infernal Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Fortitude",
+              "jobs": ["ALL"]
+            },
+            {
+              "name": "Coral Earring",
+              "category": "accessory",
+              "rarity": "rare",
+              "description": "Ear accessory from Jailer of Fortitude",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Absolute Virtue": {
+          "id": "absolute_virtue",
+          "display_name": "Absolute Virtue",
+          "description": "The ultimate sea challenge",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Absolute Virtue items"
+            },
+            {
+              "name": "Virtue Stone",
+              "category": "material",
+              "rarity": "legendary",
+              "description": "Ultimate material from Absolute Virtue"
+            }
+          ]
+        }
+      }
+    },
+    "dynamis": {
+      "id": "dynamis",
+      "display_name": "Dynamis",
+      "description": "Dynamis zones and currency farming",
+      "emoji": "⚔️",
+      "color": "#8B0000",
+      "subcategories": {
+        "All Dynamis": {
+          "id": "all_dynamis",
+          "display_name": "All Dynamis Zones",
+          "description": "General dynamis content and currency",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All dynamis-related items"
+            },
+            {
+              "name": "Ancient Currency",
+              "category": "currency",
+              "rarity": "rare",
+              "description": "Currency used in dynamis zones"
+            },
+            {
+              "name": "Relic Armor",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Legendary armor sets from dynamis"
+            },
+            {
+              "name": "Relic Weapons",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary weapons from dynamis"
+            },
+            {
+              "name": "100 Byne Bills",
+              "category": "currency",
+              "rarity": "common",
+              "description": "Basic dynamis currency"
+            },
+            {
+              "name": "1 Montiont Silverpiece",
+              "category": "currency",
+              "rarity": "uncommon",
+              "description": "Mid-tier dynamis currency"
+            },
+            {
+              "name": "1 Ranperre's Goldpiece",
+              "category": "currency",
+              "rarity": "rare",
+              "description": "High-tier dynamis currency"
+            },
+            {
+              "name": "1 Lungo-Nango Jadeshell",
+              "category": "currency",
+              "rarity": "legendary",
+              "description": "Ultimate dynamis currency"
+            }
+          ]
+        },
+        "Dynamis - Bastok": {
+          "id": "dynamis_bastok",
+          "display_name": "Dynamis - Bastok",
+          "description": "Bastok's fallen timeline",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Dynamis Bastok items"
+            },
+            {
+              "name": "Hydra Corps",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Body armor from Dynamis Bastok"
+            },
+            {
+              "name": "Hydra Salade",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Head armor from Dynamis Bastok"
+            },
+            {
+              "name": "100 Byne Bills",
+              "category": "currency",
+              "rarity": "common",
+              "description": "Basic currency from Dynamis Bastok"
+            }
+          ]
+        },
+        "Dynamis - San d'Oria": {
+          "id": "dynamis_sandoria",
+          "display_name": "Dynamis - San d'Oria",
+          "description": "San d'Oria's fallen timeline",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Dynamis San d'Oria items"
+            },
+            {
+              "name": "Temple Crown",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Head armor from Dynamis San d'Oria"
+            },
+            {
+              "name": "Temple Cyclas",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Body armor from Dynamis San d'Oria"
+            },
+            {
+              "name": "1 Montiont Silverpiece",
+              "category": "currency",
+              "rarity": "uncommon",
+              "description": "Currency from Dynamis San d'Oria"
+            }
+          ]
+        },
+        "Dynamis - Windurst": {
+          "id": "dynamis_windurst",
+          "display_name": "Dynamis - Windurst",
+          "description": "Windurst's fallen timeline",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Dynamis Windurst items"
+            },
+            {
+              "name": "Sorcerer's Petasos",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Head armor from Dynamis Windurst"
+            },
+            {
+              "name": "Sorcerer's Coat",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Body armor from Dynamis Windurst"
+            },
+            {
+              "name": "1 Ranperre's Goldpiece",
+              "category": "currency",
+              "rarity": "rare",
+              "description": "Currency from Dynamis Windurst"
+            }
+          ]
+        },
+        "Dynamis - Jeuno": {
+          "id": "dynamis_jeuno",
+          "display_name": "Dynamis - Jeuno",
+          "description": "Jeuno's fallen timeline",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Dynamis Jeuno items"
+            },
+            {
+              "name": "Apocalypse",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary scythe from Dynamis Jeuno",
+              "jobs": ["DRK"]
+            },
+            {
+              "name": "Ragnarok",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary sword from Dynamis Jeuno",
+              "jobs": ["WAR"]
+            },
+            {
+              "name": "Redemption",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary staff from Dynamis Jeuno",
+              "jobs": ["WHM"]
+            },
+            {
+              "name": "1 Lungo-Nango Jadeshell",
+              "category": "currency",
+              "rarity": "legendary",
+              "description": "Ultimate currency from Dynamis Jeuno"
+            }
+          ]
+        }
+      }
+    },
+    "limbus": {
+      "id": "limbus",
+      "display_name": "Limbus",
+      "description": "Limbus zones and Homam/Nashira gear",
+      "emoji": "🔮",
+      "color": "#4B0082",
+      "subcategories": {
+        "All Limbus": {
+          "id": "all_limbus",
+          "display_name": "All Limbus Zones",
+          "description": "General limbus content",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All limbus-related items"
+            },
+            {
+              "name": "Homam Gear",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Homam armor set from limbus"
+            },
+            {
+              "name": "Nashira Gear",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Nashira armor set from limbus"
+            },
+            {
+              "name": "Ancient Beastcoin",
+              "category": "currency",
+              "rarity": "rare",
+              "description": "Currency used in limbus zones"
+            },
+            {
+              "name": "Temenos Chips",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Chips from Temenos zones"
+            },
+            {
+              "name": "Apollyon Chips",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Chips from Apollyon zones"
+            }
+          ]
+        },
+        "Temenos": {
+          "id": "temenos",
+          "display_name": "Temenos",
+          "description": "The western limbus zones",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Temenos items"
+            },
+            {
+              "name": "Homam Zucchetto",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Head armor from Temenos",
+              "jobs": ["WAR", "MNK", "THF", "PLD", "DRK", "BST", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Homam Corazza",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Body armor from Temenos",
+              "jobs": ["WAR", "MNK", "THF", "PLD", "DRK", "BST", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Temenos Orb",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Entry item for Temenos"
+            }
+          ]
+        },
+        "Apollyon": {
+          "id": "apollyon",
+          "display_name": "Apollyon",
+          "description": "The eastern limbus zones",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Apollyon items"
+            },
+            {
+              "name": "Nashira Turban",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Head armor from Apollyon",
+              "jobs": ["WHM", "BLM", "RDM", "BRD", "SMN"]
+            },
+            {
+              "name": "Nashira Manteel",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Body armor from Apollyon",
+              "jobs": ["WHM", "BLM", "RDM", "BRD", "SMN"]
+            },
+            {
+              "name": "Apollyon Orb",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Entry item for Apollyon"
+            }
+          ]
+        },
+        "Omega": {
+          "id": "omega",
+          "display_name": "Omega",
+          "description": "The ultimate mechanical being",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Omega items"
+            },
+            {
+              "name": "Omega's Eye",
+              "category": "material",
+              "rarity": "legendary",
+              "description": "Ultimate material from Omega"
+            }
+          ]
+        },
+        "Ultima": {
+          "id": "ultima",
+          "display_name": "Ultima",
+          "description": "The ultimate magical being",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Ultima items"
+            },
+            {
+              "name": "Ultima's Cerebrum",
+              "category": "material",
+              "rarity": "legendary",
+              "description": "Ultimate material from Ultima"
+            }
+          ]
+        }
+      }
+    },
+    "others": {
+      "id": "others",
+      "display_name": "Others",
+      "description": "Other endgame content and miscellaneous items",
+      "emoji": "🎭",
+      "color": "#708090",
+      "subcategories": {
+        "Einherjar": {
+          "id": "einherjar",
+          "display_name": "Einherjar",
+          "description": "Norse mythology inspired content",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Einherjar items"
+            },
+            {
+              "name": "Gleipnir",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary chain from Einherjar"
+            },
+            {
+              "name": "Gungnir",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary spear from Einherjar",
+              "jobs": ["DRG"]
+            },
+            {
+              "name": "Defending Ring",
+              "category": "accessory",
+              "rarity": "legendary",
+              "description": "Ultimate defensive ring",
+              "jobs": ["ALL"]
+            }
+          ]
+        },
+        "Salvage": {
+          "id": "salvage",
+          "display_name": "Salvage",
+          "description": "Salvage zones and gear upgrading",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All Salvage items"
+            },
+            {
+              "name": "Usukane Gear",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Usukane armor set from Salvage"
+            },
+            {
+              "name": "Serafim Gear",
+              "category": "armor",
+              "rarity": "legendary",
+              "description": "Serafim armor set from Salvage"
+            },
+            {
+              "name": "35 Piece",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Upgrade material from Salvage"
+            },
+            {
+              "name": "15 Piece",
+              "category": "material",
+              "rarity": "uncommon",
+              "description": "Basic material from Salvage"
+            },
+            {
+              "name": "Alexandrite",
+              "category": "material",
+              "rarity": "legendary",
+              "description": "Rare gem for weapon upgrades"
+            }
+          ]
+        },
+        "ZNMs": {
+          "id": "znms",
+          "display_name": "Zeni Notorious Monsters",
+          "description": "Zeni point notorious monsters",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All ZNM items"
+            },
+            {
+              "name": "Tier I ZNM Pops",
+              "category": "material",
+              "rarity": "common",
+              "description": "Pop items for Tier I ZNMs"
+            },
+            {
+              "name": "Tier II ZNM Pops",
+              "category": "material",
+              "rarity": "uncommon",
+              "description": "Pop items for Tier II ZNMs"
+            },
+            {
+              "name": "Tier III ZNM Pops",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Pop items for Tier III ZNMs"
+            },
+            {
+              "name": "Zeni",
+              "category": "currency",
+              "rarity": "common",
+              "description": "Currency for ZNM system"
+            }
+          ]
+        },
+        "HNMs": {
+          "id": "hnms",
+          "display_name": "High Notorious Monsters",
+          "description": "Traditional high notorious monsters",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All HNM items"
+            },
+            {
+              "name": "Ridill",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary sword from Fafnir",
+              "jobs": ["WAR", "PLD", "DRK", "RDM", "THF", "BST", "BRD", "RNG", "SAM", "NIN", "DRG"]
+            },
+            {
+              "name": "Kraken Club",
+              "category": "weapon",
+              "rarity": "legendary",
+              "description": "Legendary club from Lord of Onzozo",
+              "jobs": ["WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN", "DRG", "SMN"]
+            }
+          ]
+        },
+        "Crafting": {
+          "id": "crafting",
+          "display_name": "Crafting Materials",
+          "description": "High-quality synthesis materials",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All crafting materials"
+            },
+            {
+              "name": "Damascus Ingot",
+              "category": "material",
+              "rarity": "legendary",
+              "description": "Ultimate smithing material"
+            },
+            {
+              "name": "Wootz Ore",
+              "category": "material",
+              "rarity": "rare",
+              "description": "High-quality ore for smithing"
+            },
+            {
+              "name": "Voidstone",
+              "category": "material",
+              "rarity": "rare",
+              "description": "Mysterious crafting stone"
+            }
+          ]
+        },
+        "Currency": {
+          "id": "currency",
+          "display_name": "Currency Items",
+          "description": "Various currency and point systems",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All currency items"
+            },
+            {
+              "name": "Imperial Standing",
+              "category": "currency",
+              "rarity": "common",
+              "description": "Currency for Aht Urhgan content"
+            },
+            {
+              "name": "Assault Points",
+              "category": "currency",
+              "rarity": "common",
+              "description": "Points from Assault missions"
+            },
+            {
+              "name": "Therion Ichor",
+              "category": "currency",
+              "rarity": "rare",
+              "description": "Currency from Einherjar"
+            }
+          ]
+        },
+        "Misc": {
+          "id": "misc",
+          "display_name": "Miscellaneous",
+          "description": "Various other items and collectibles",
+          "items": [
+            {
+              "name": "All Items",
+              "category": "general",
+              "rarity": "common",
+              "description": "All miscellaneous items"
+            },
+            {
+              "name": "Rare/Ex Gear",
+              "category": "equipment",
+              "rarity": "rare",
+              "description": "Rare/Exclusive equipment pieces"
+            },
+            {
+              "name": "Testimony Items",
+              "category": "material",
+              "rarity": "uncommon",
+              "description": "Items for job quests and upgrades"
+            },
+            {
+              "name": "Consumables",
+              "category": "consumable",
+              "rarity": "common",
+              "description": "Food, medicines, and temporary items"
+            },
+            {
+              "name": "Furniture",
+              "category": "furniture",
+              "rarity": "uncommon",
+              "description": "Mog house furniture and decorations"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "item_categories": {
+    "weapon": {
+      "display_name": "Weapons",
+      "emoji": "⚔️",
+      "description": "All weapon types"
+    },
+    "armor": {
+      "display_name": "Armor",
+      "emoji": "🛡️",
+      "description": "All armor pieces"
+    },
+    "accessory": {
+      "display_name": "Accessories",
+      "emoji": "💍",
+      "description": "Rings, earrings, and other accessories"
+    },
+    "material": {
+      "display_name": "Materials",
+      "emoji": "💎",
+      "description": "Crafting and upgrade materials"
+    },
+    "currency": {
+      "display_name": "Currency",
+      "emoji": "💰",
+      "description": "Various currency items"
+    },
+    "consumable": {
+      "display_name": "Consumables",
+      "emoji": "🍖",
+      "description": "Food, medicines, and temporary items"
+    },
+    "general": {
+      "display_name": "General",
+      "emoji": "📦",
+      "description": "General items and catch-all category"
+    }
+  },
+  "rarity_levels": {
+    "common": {
+      "display_name": "Common",
+      "color": "#FFFFFF",
+      "emoji": "⚪"
+    },
+    "uncommon": {
+      "display_name": "Uncommon",
+      "color": "#00FF00",
+      "emoji": "🟢"
+    },
+    "rare": {
+      "display_name": "Rare",
+      "color": "#0000FF",
+      "emoji": "🔵"
+    },
+    "legendary": {
+      "display_name": "Legendary",
+      "color": "#FFD700",
+      "emoji": "🟡"
+    }
+  },
+  "job_abbreviations": {
+    "WAR": "Warrior",
+    "MNK": "Monk",
+    "WHM": "White Mage",
+    "BLM": "Black Mage",
+    "RDM": "Red Mage",
+    "THF": "Thief",
+    "PLD": "Paladin",
+    "DRK": "Dark Knight",
+    "BST": "Beastmaster",
+    "BRD": "Bard",
+    "RNG": "Ranger",
+    "SAM": "Samurai",
+    "NIN": "Ninja",
+    "DRG": "Dragoon",
+    "SMN": "Summoner",
+    "ALL": "All Jobs"
+  },
+  "search_aliases": {
+    "ridill": ["ridill", "fafnir sword", "faf sword"],
+    "kraken club": ["kraken club", "kclub", "kc"],
+    "haubergeon": ["haubergeon", "haub", "hauberk"],
+    "brutal earring": ["brutal earring", "brutal", "be"],
+    "suppanomimi": ["suppanomimi", "suppa", "snm"],
+    "hope torque": ["hope torque", "hope", "ht"],
+    "faith torque": ["faith torque", "faith", "ft"],
+    "fortitude torque": ["fortitude torque", "fortitude", "fort torque"]
+  },
+  "popular_items": [
+    "Ridill",
+    "Kraken Club",
+    "Haubergeon",
+    "Hope Torque",
+    "Brutal Earring",
+    "Suppanomimi",
+    "Novio Earring",
+    "Homam Corazza",
+    "Nashira Manteel",
+    "Ancient Currency",
+    "Shura Zunari Kabuto",
+    "Kirin's Osode",
+    "Defending Ring",
+    "Peacock Charm",
+    "Justice Badge",
+    "Speed Belt",
+    "Byakko's Haidate",
+    "Suzaku's Sune-ate",
+    "Genbu's Shield",
+    "Seiryu's Kote"
+  ]
+}
