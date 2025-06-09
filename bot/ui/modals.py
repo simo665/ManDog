@@ -86,24 +86,17 @@ class DateTimeSelectView(discord.ui.View):
             datetime_str = f"{self.listing_data['date']} {self.listing_data['time']}"
             scheduled_time = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
             
-            # Use the marketplace service to create listing
-            from bot.services.marketplace import MarketplaceService
-            marketplace_service = MarketplaceService(self.bot)
-            
-            listing_data = {
-                'listing_type': self.listing_data['listing_type'],
-                'zone': self.listing_data['zone'],
-                'subcategory': self.listing_data['subcategory'],
-                'item': self.listing_data['item'],
-                'quantity': self.listing_data['quantity'],
-                'notes': self.listing_data['notes'],
-                'scheduled_time': scheduled_time
-            }
-            
-            listing_id = await marketplace_service.create_listing(
+            # Store listing in database
+            listing_id = await self.bot.db_manager.create_listing(
                 user_id=interaction.user.id,
                 guild_id=interaction.guild.id,
-                listing_data=listing_data
+                listing_type=self.listing_data['listing_type'],
+                zone=self.listing_data['zone'],
+                subcategory=self.listing_data['subcategory'],
+                item=self.listing_data['item'],
+                quantity=self.listing_data['quantity'],
+                notes=self.listing_data['notes'],
+                scheduled_time=scheduled_time
             )
             
             if listing_id:
@@ -117,6 +110,15 @@ class DateTimeSelectView(discord.ui.View):
                 )
                 
                 await interaction.followup.send(embed=embed, ephemeral=True)
+                
+                # Refresh marketplace embed using marketplace service
+                from bot.services.marketplace import MarketplaceService
+                marketplace_service = MarketplaceService(self.bot)
+                await marketplace_service.refresh_marketplace_embeds_for_zone(
+                    interaction.guild.id,
+                    self.listing_data['listing_type'],
+                    self.listing_data['zone']
+                )
             else:
                 await interaction.followup.send(
                     "❌ Failed to create listing",
@@ -130,7 +132,10 @@ class DateTimeSelectView(discord.ui.View):
                 ephemeral=True
             )
     
-    
+    async def refresh_marketplace_channel(self, interaction: discord.Interaction):
+        """Refresh the marketplace channel embed."""
+        # This would update the main marketplace message in the channel
+        pass
 
 class ListingModal(discord.ui.Modal):
     """Modal for creating a new listing (legacy - use QuantityNotesModal instead)."""
@@ -286,24 +291,17 @@ class CustomTimeModal(discord.ui.Modal):
                 )
                 return
             
-            # Use the marketplace service to create listing
-            from bot.services.marketplace import MarketplaceService
-            marketplace_service = MarketplaceService(self.bot)
-            
-            listing_data = {
-                'listing_type': self.listing_data['listing_type'],
-                'zone': self.listing_data['zone'],
-                'subcategory': self.listing_data['subcategory'],
-                'item': self.listing_data['item'],
-                'quantity': self.listing_data['quantity'],
-                'notes': self.listing_data['notes'],
-                'scheduled_time': scheduled_time
-            }
-            
-            listing_id = await marketplace_service.create_listing(
+            # Store listing in database
+            listing_id = await self.bot.db_manager.create_listing(
                 user_id=interaction.user.id,
                 guild_id=interaction.guild.id,
-                listing_data=listing_data
+                listing_type=self.listing_data['listing_type'],
+                zone=self.listing_data['zone'],
+                subcategory=self.listing_data['subcategory'],
+                item=self.listing_data['item'],
+                quantity=self.listing_data['quantity'],
+                notes=self.listing_data['notes'],
+                scheduled_time=scheduled_time
             )
             
             if listing_id:
@@ -317,6 +315,15 @@ class CustomTimeModal(discord.ui.Modal):
                 )
                 
                 await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+                # Refresh marketplace embed using marketplace service
+                from bot.services.marketplace import MarketplaceService
+                marketplace_service = MarketplaceService(self.bot)
+                await marketplace_service.refresh_marketplace_embeds_for_zone(
+                    interaction.guild.id,
+                    self.listing_data['listing_type'],
+                    self.listing_data['zone']
+                )
             else:
                 await interaction.response.send_message(
                     "❌ Failed to create listing",
