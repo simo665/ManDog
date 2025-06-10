@@ -69,11 +69,17 @@ class MarketplaceView(discord.ui.View):
         self.current_page = current_page
         self.embeds = MarketplaceEmbeds()
 
+        # Update custom_ids to include context
+        self.prev_button.custom_id = f"marketplace_prev_{listing_type}_{zone}"
+        self.next_button.custom_id = f"marketplace_next_{listing_type}_{zone}"
+        self.add_button.custom_id = f"marketplace_add_{listing_type}_{zone}"
+        self.remove_button.custom_id = f"marketplace_remove_{listing_type}_{zone}"
+
         # Customize button labels based on type
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
 
-    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary, custom_id="marketplace_prev", row=0)
+    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary, row=0)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle previous page button."""
         try:
@@ -86,7 +92,7 @@ class MarketplaceView(discord.ui.View):
             logger.error(f"Error in prev button: {e}")
             await self.safe_defer(interaction)
 
-    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary, custom_id="marketplace_next", row=0)
+    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle next page button."""
         try:
@@ -105,12 +111,12 @@ class MarketplaceView(discord.ui.View):
             logger.error(f"Error in next button: {e}")
             await self.safe_defer(interaction)
 
-    @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", custom_id="marketplace_add", row=1)
+    @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", row=1)
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle add listing button."""
         await self.start_listing_flow(interaction)
 
-    @discord.ui.button(label="Remove WTS", style=discord.ButtonStyle.red, emoji="➖", custom_id="marketplace_remove", row=1)
+    @discord.ui.button(label="Remove WTS", style=discord.ButtonStyle.red, emoji="➖", row=1)
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle remove listing button."""
         await self.show_remove_options(interaction)
@@ -134,22 +140,31 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Validate zone name - fix the zone extraction issue
-            if not self.zone:
-                # Try to get zone from channel info
-                channel_info = await self.bot.db_manager.execute_query(
-                    "SELECT zone FROM marketplace_channels WHERE channel_id = $1",
-                    interaction.channel.id
-                )
+            # Get channel information to ensure we have correct context
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT listing_type, zone FROM marketplace_channels WHERE channel_id = $1",
+                interaction.channel.id
+            )
 
-                if channel_info and channel_info[0]['zone']:
-                    self.zone = channel_info[0]['zone']
-                else:
-                    await interaction.response.send_message(
-                        "❌ Invalid zone configuration. Please contact an administrator.",
-                        ephemeral=True
-                    )
-                    return
+            if channel_info:
+                # Use the channel's actual configuration
+                channel_data = channel_info[0]
+                actual_listing_type = channel_data['listing_type']
+                actual_zone = channel_data['zone']
+                
+                # Update instance variables with correct values
+                self.listing_type = actual_listing_type
+                self.zone = actual_zone
+                
+                logger.info(f"Updated view context: {self.listing_type} in {self.zone} for channel {interaction.channel.id}")
+            
+            # Validate zone name
+            if not self.zone or self.zone == "unknown":
+                await interaction.response.send_message(
+                    "❌ Invalid zone configuration. Please contact an administrator.",
+                    ephemeral=True
+                )
+                return
 
             # Get subcategories for this zone
             subcategories = get_zone_subcategories(self.zone)
@@ -223,22 +238,31 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Validate zone name - same fix as above
-            if not self.zone:
-                # Try to get zone from channel info
-                channel_info = await self.bot.db_manager.execute_query(
-                    "SELECT zone FROM marketplace_channels WHERE channel_id = $1",
-                    interaction.channel.id
-                )
+            # Get channel information to ensure we have correct context
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT listing_type, zone FROM marketplace_channels WHERE channel_id = $1",
+                interaction.channel.id
+            )
 
-                if channel_info and channel_info[0]['zone']:
-                    self.zone = channel_info[0]['zone']
-                else:
-                    await interaction.response.send_message(
-                        "❌ Invalid zone configuration. Please contact an administrator.",
-                        ephemeral=True
-                    )
-                    return
+            if channel_info:
+                # Use the channel's actual configuration
+                channel_data = channel_info[0]
+                actual_listing_type = channel_data['listing_type']
+                actual_zone = channel_data['zone']
+                
+                # Update instance variables with correct values
+                self.listing_type = actual_listing_type
+                self.zone = actual_zone
+                
+                logger.info(f"Updated view context: {self.listing_type} in {self.zone} for channel {interaction.channel.id}")
+            
+            # Validate zone name
+            if not self.zone or self.zone == "unknown":
+                await interaction.response.send_message(
+                    "❌ Invalid zone configuration. Please contact an administrator.",
+                    ephemeral=True
+                )
+                return
 
             # Get user's active listings for this zone
             listings = await self.bot.db_manager.get_user_listings(

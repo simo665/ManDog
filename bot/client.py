@@ -70,30 +70,48 @@ class MandokBot(commands.Bot):
         try:
             from bot.ui.views import MarketplaceView
 
-            # Get all marketplace channels from database
+            # Clear any existing persistent views to prevent duplicates
+            self.persistent_views.clear()
+
+            # Get all unique marketplace channel configurations from database
             marketplace_channels = await self.db_manager.execute_query("""
-                SELECT channel_id, listing_type, zone FROM marketplace_channels
+                SELECT DISTINCT channel_id, listing_type, zone FROM marketplace_channels
+                WHERE zone IS NOT NULL AND zone != 'unknown'
+                ORDER BY channel_id
             """)
 
             loaded_views = 0
+            unique_configs = set()
+            
             for channel_data in marketplace_channels:
                 channel_id = channel_data['channel_id']
                 listing_type = channel_data['listing_type']
                 zone = channel_data['zone']
 
-                # Create and add persistent view for all zones (including "others")
-                if zone:
-                    try:
-                        view = MarketplaceView(self, listing_type, zone)
-                        self.add_view(view)
-                        loaded_views += 1
-                        logger.debug(f"Loaded persistent view for {listing_type} in {zone}")
-                    except Exception as e:
-                        logger.error(f"Failed to load view for channel {channel_id}: {e}")
-                else:
-                    logger.warning(f"Skipping channel {channel_id} with no zone")
+                # Create unique identifier for this configuration
+                config_key = f"{listing_type}_{zone}"
+                
+                # Skip if we've already loaded a view for this configuration
+                if config_key in unique_configs:
+                    logger.debug(f"Skipping duplicate configuration for {listing_type} in {zone}")
+                    continue
 
-            logger.info(f"Loaded {loaded_views} persistent marketplace views")
+                # Verify channel still exists
+                channel = self.get_channel(channel_id)
+                if not channel:
+                    logger.warning(f"Channel {channel_id} not found, skipping view creation")
+                    continue
+
+                try:
+                    view = MarketplaceView(self, listing_type, zone, 0)
+                    self.add_view(view)
+                    unique_configs.add(config_key)
+                    loaded_views += 1
+                    logger.debug(f"Loaded persistent view for {listing_type} in {zone}")
+                except Exception as e:
+                    logger.error(f"Failed to load view for channel {channel_id}: {e}")
+
+            logger.info(f"Loaded {loaded_views} unique persistent marketplace views")
 
         except Exception as e:
             logger.error(f"Error loading persistent views: {e}")
