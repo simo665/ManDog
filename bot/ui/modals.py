@@ -346,6 +346,10 @@ class QuantityNotesModal(discord.ui.Modal):
 
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+            # Set a default scheduled_time since we're not using the date/time selection
+            from datetime import datetime
+            self.listing_data['scheduled_time'] = datetime.now()
+
             # Create the listing
             logger.info(f"📝 MODAL DEBUG: Creating listing for user {interaction.user.id}")
             logger.info(f"📝 MODAL DEBUG: Listing data: {self.listing_data}")

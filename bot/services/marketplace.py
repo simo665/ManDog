@@ -1,7 +1,4 @@
-` tags.
 
-```
-<replit_final_file>
 """
 Core marketplace business logic and services.
 """
