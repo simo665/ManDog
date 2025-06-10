@@ -350,8 +350,8 @@ class OrderingService:
 
             # Send completion messages
             completion_embed = discord.Embed(
-                title="✅ Trade Confirmed!",
-                description="Both parties have confirmed the trade. Please complete the transaction and then rate each other.",
+                title="🎉 Trade Confirmed!",
+                description="**Both parties have confirmed the trade!**\n\nPlease trade the item and rate each other below.",
                 color=0x00FF00,
                 timestamp=datetime.now(timezone.utc)
             )
@@ -368,36 +368,50 @@ class OrderingService:
                 inline=True
             )
 
+            completion_embed.add_field(
+                name="📦 Quantity",
+                value=str(order_data['quantity']),
+                inline=True
+            )
+
+            completion_embed.add_field(
+                name="📝 Next Steps",
+                value="1. Complete the item trade in-game\n2. Rate your trade partner below",
+                inline=False
+            )
+
             # Send to both parties with rating buttons
             from bot.ui.views_ordering import OrderCompletionView
 
             # Send to buyer
             buyer_completion_embed = completion_embed.copy()
             buyer_completion_embed.add_field(
-                name="💰 Seller",
-                value=seller.mention,
+                name="💰 Your Trade Partner (Seller)",
+                value=f"{seller.mention}\n*Please complete the trade and rate them*",
                 inline=False
             )
             buyer_view = OrderCompletionView(self.bot, order_id, "buyer", seller.id)
 
             try:
                 await buyer.send(embed=buyer_completion_embed, view=buyer_view)
+                logger.info(f"✅ Sent trade completion message to buyer {buyer.display_name}")
             except discord.Forbidden:
-                pass
+                logger.warning(f"❌ Cannot send DM to buyer {buyer.display_name}")
 
             # Send to seller
             seller_completion_embed = completion_embed.copy()
             seller_completion_embed.add_field(
-                name="🛒 Buyer",
-                value=buyer.mention,
+                name="🛒 Your Trade Partner (Buyer)",
+                value=f"{buyer.mention}\n*Please complete the trade and rate them*",
                 inline=False
             )
             seller_view = OrderCompletionView(self.bot, order_id, "seller", buyer.id)
 
             try:
                 await seller.send(embed=seller_completion_embed, view=seller_view)
+                logger.info(f"✅ Sent trade completion message to seller {seller.display_name}")
             except discord.Forbidden:
-                pass
+                logger.warning(f"❌ Cannot send DM to seller {seller.display_name}")
 
             # Store for rating tracking
             self.pending_ratings[order_id] = {
@@ -409,7 +423,7 @@ class OrderingService:
                 'ratings': {}
             }
 
-            logger.info(f"Order {order_id} completed, rating phase initiated")
+            logger.info(f"🎉 Order {order_id} completed successfully, rating phase initiated")
 
         except Exception as e:
             logger.error(f"Error completing order: {e}")

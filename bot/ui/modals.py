@@ -5,6 +5,7 @@ Discord modals for user input in the marketplace bot.
 import discord
 from typing import Dict, Any
 import logging
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +87,16 @@ class DateTimeSelectView(discord.ui.View):
             datetime_str = f"{self.listing_data['date']} {self.listing_data['time']}"
             scheduled_time = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
 
-            # Store listing in database
-            listing_id = await self.bot.db_manager.create_listing(
+            # Use marketplace service to create listing and trigger matching
+            from bot.services.marketplace import MarketplaceService
+            marketplace_service = MarketplaceService(self.bot)
+            listing_id = await marketplace_service.create_listing(
                 user_id=interaction.user.id,
                 guild_id=interaction.guild.id,
-                listing_type=self.listing_data['listing_type'],
-                zone=self.listing_data['zone'],
-                subcategory=self.listing_data['subcategory'],
-                item=self.listing_data['item'],
-                quantity=self.listing_data['quantity'],
-                notes=self.listing_data['notes'],
-                scheduled_time=scheduled_time
+                listing_data={
+                    **self.listing_data,
+                    'scheduled_time': scheduled_time
+                }
             )
 
             if listing_id:
@@ -111,8 +111,9 @@ class DateTimeSelectView(discord.ui.View):
 
                 await interaction.followup.send(embed=embed, ephemeral=True)
 
-                # Refresh the original marketplace embed directly
+                # Refresh the original marketplace embed
                 await self.refresh_original_embed_custom(interaction)
+                logger.info(f"📝 MODAL DEBUG: Created listing with ID: {listing_id}")
             else:
                 await interaction.followup.send(
                     "❌ Failed to create listing",
@@ -336,39 +337,36 @@ class QuantityNotesModal(discord.ui.Modal):
             self.listing_data['quantity'] = quantity
             self.listing_data['notes'] = self.notes_input.value
 
-            # Set a default scheduled_time and create the listing immediately
-            from datetime import datetime
-            self.listing_data['scheduled_time'] = datetime.now()
-
-            # Create the listing
-            logger.info(f"📝 MODAL DEBUG: Creating listing for user {interaction.user.id}")
-            logger.info(f"📝 MODAL DEBUG: Listing data: {self.listing_data}")
-
-            from bot.services.marketplace import MarketplaceService
-            marketplace_service = MarketplaceService(self.bot)
-            listing_id = await marketplace_service.create_listing(
-                user_id=interaction.user.id,
-                guild_id=interaction.guild.id,
-                listing_data=self.listing_data
+            # Show date/time selection view
+            view = DateTimeSelectView(self.bot, self.listing_data)
+            
+            embed = discord.Embed(
+                title="📅 Schedule Your Listing",
+                description=f"When would you like to be available for **{self.listing_data['item']}**?",
+                color=0x3B82F6,
+                timestamp=datetime.now(timezone.utc)
             )
-
-            if listing_id:
-                # Send confirmation
-                from bot.ui.embeds import MarketplaceEmbeds
-                embeds = MarketplaceEmbeds()
-                embed = embeds.create_listing_confirmation_embed(
-                    self.listing_data['listing_type'],
-                    self.listing_data['item'],
-                    self.listing_data['scheduled_time']
+            
+            embed.add_field(
+                name="🎯 Item",
+                value=self.listing_data['item'],
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📦 Quantity", 
+                value=str(quantity),
+                inline=True
+            )
+            
+            if self.listing_data['notes']:
+                embed.add_field(
+                    name="📝 Notes",
+                    value=self.listing_data['notes'][:200],
+                    inline=False
                 )
 
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-                logger.info(f"📝 MODAL DEBUG: Created listing with ID: {listing_id}")
-            else:
-                await interaction.response.send_message(
-                    "❌ Failed to create listing",
-                    ephemeral=True
-                )
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         except Exception as e:
             logger.error(f"Error in quantity/notes modal submission: {e}")
@@ -425,17 +423,16 @@ class CustomTimeModal(discord.ui.Modal):
                 )
                 return
 
-            # Store listing in database
-            listing_id = await self.bot.db_manager.create_listing(
+            # Use marketplace service to create listing and trigger matching
+            from bot.services.marketplace import MarketplaceService
+            marketplace_service = MarketplaceService(self.bot)
+            listing_id = await marketplace_service.create_listing(
                 user_id=interaction.user.id,
                 guild_id=interaction.guild.id,
-                listing_type=self.listing_data['listing_type'],
-                zone=self.listing_data['zone'],
-                subcategory=self.listing_data['subcategory'],
-                item=self.listing_data['item'],
-                quantity=self.listing_data['quantity'],
-                notes=self.listing_data['notes'],
-                scheduled_time=scheduled_time
+                listing_data={
+                    **self.listing_data,
+                    'scheduled_time': scheduled_time
+                }
             )
 
             if listing_id:

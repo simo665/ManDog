@@ -155,8 +155,21 @@ class MarketplaceEmbeds:
                     
                     # Add scheduled time if available
                     if scheduled_time:
-                        timestamp = int(scheduled_time.timestamp()) if hasattr(scheduled_time, 'timestamp') else scheduled_time
-                        listing_line += f" <t:{timestamp}:R>"
+                        try:
+                            if hasattr(scheduled_time, 'timestamp'):
+                                timestamp = int(scheduled_time.timestamp())
+                            else:
+                                # Handle datetime objects that might not have timestamp method
+                                from datetime import datetime
+                                if isinstance(scheduled_time, datetime):
+                                    timestamp = int(scheduled_time.timestamp())
+                                else:
+                                    timestamp = int(scheduled_time)
+                            listing_line += f" <t:{timestamp}:R>"
+                        except Exception as e:
+                            logger.warning(f"Could not format scheduled time: {e}")
+                            # Fallback to basic display
+                            listing_line += f" (Scheduled)"
                     
                     # Add notes if available (truncated)
                     if notes:

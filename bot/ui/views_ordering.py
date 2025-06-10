@@ -105,17 +105,102 @@ class OrderCompletionView(discord.ui.View):
         self.role = role
         self.other_party_id = other_party_id
 
-    @discord.ui.button(label="⭐ Rate Trade Partner", style=discord.ButtonStyle.primary)
-    async def rate_partner(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Open rating modal."""
+    @discord.ui.button(label="⭐ 1 Star", style=discord.ButtonStyle.danger, row=0)
+    async def rate_1_star(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 1 star."""
+        await self.handle_rating(interaction, 1)
+
+    @discord.ui.button(label="⭐⭐ 2 Stars", style=discord.ButtonStyle.danger, row=0)
+    async def rate_2_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 2 stars."""
+        await self.handle_rating(interaction, 2)
+
+    @discord.ui.button(label="⭐⭐⭐ 3 Stars", style=discord.ButtonStyle.secondary, row=0)
+    async def rate_3_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 3 stars."""
+        await self.handle_rating(interaction, 3)
+
+    @discord.ui.button(label="⭐⭐⭐⭐ 4 Stars", style=discord.ButtonStyle.success, row=1)
+    async def rate_4_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 4 stars."""
+        await self.handle_rating(interaction, 4)
+
+    @discord.ui.button(label="⭐⭐⭐⭐⭐ 5 Stars", style=discord.ButtonStyle.success, row=1)
+    async def rate_5_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 5 stars."""
+        await self.handle_rating(interaction, 5)
+
+    async def handle_rating(self, interaction: discord.Interaction, rating: int):
+        """Handle star rating selection."""
         try:
-            modal = RatingModal(self.bot, self.order_id, self.other_party_id)
+            # Open modal for optional comment
+            modal = QuickRatingModal(self.bot, self.order_id, self.other_party_id, rating)
             await interaction.response.send_modal(modal)
 
         except Exception as e:
-            logger.error(f"Error opening rating modal: {e}")
+            logger.error(f"Error handling rating: {e}")
             try:
                 await interaction.response.send_message("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+class QuickRatingModal(discord.ui.Modal):
+    """Modal for submitting ratings with pre-selected stars."""
+
+    def __init__(self, bot, order_id: str, rated_user_id: int, rating: int):
+        stars = "⭐" * rating
+        super().__init__(title=f"Rate {rating}/5 Stars")
+        self.bot = bot
+        self.order_id = order_id
+        self.rated_user_id = rated_user_id
+        self.rating = rating
+
+        # Comment input
+        self.comment_input = discord.ui.TextInput(
+            label=f"Comment for {stars} rating (optional)",
+            placeholder="Share your experience with this trader...",
+            style=discord.TextStyle.paragraph,
+            min_length=0,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.comment_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle rating submission."""
+        try:
+            comment = self.comment_input.value.strip()
+
+            await interaction.response.defer()
+
+            ordering_service = self.bot.ordering_service
+
+            success = await ordering_service.handle_rating_submission(
+                self.order_id, interaction.user.id, self.rated_user_id, self.rating, comment
+            )
+
+            if success:
+                stars = "⭐" * self.rating
+                if self.rating < 3:
+                    await interaction.followup.send(
+                        f"⚠️ Your {stars} rating has been submitted for admin review due to the low score.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"✅ Thank you for your {stars} rating! It has been recorded.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.followup.send(
+                    "❌ Failed to submit rating. Please try again.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error submitting rating: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
             except:
                 pass
 
