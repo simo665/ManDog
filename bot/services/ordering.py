@@ -97,9 +97,9 @@ class OrderingService:
                 logger.error(f"User {user_id} not found in guild {guild_id}")
                 return False
 
-            # Process each match
+            # Process each match (limit to 1 to prevent spam)
             matches_found = False
-            for i, match in enumerate(matches):
+            for i, match in enumerate(matches[:1]):  # Only process first match to prevent spam
                 matcher_id = match['user_id']
                 logger.info(f"🤝 MATCHING DEBUG: Processing match {i+1}/{len(matches)} - Matcher ID: {matcher_id}")
                 

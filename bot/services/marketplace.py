@@ -132,8 +132,7 @@ class MarketplaceService:
                 await self.update_user_activity(user_id, 'listing_created')
 
                 # IMMEDIATELY trigger matching system with new order confirmation workflow
-                from bot.services.ordering import OrderingService
-                ordering_service = OrderingService(self.bot)
+                ordering_service = self.bot.ordering_service
 
                 logger.info(f"Triggering match search for new listing {listing_id} by user {user_id}")
 

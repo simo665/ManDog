@@ -32,9 +32,12 @@ class MandokBot(commands.Bot):
         """Called when the bot is starting up."""
         logger.info("Setting up bot...")
 
-        # Initialize database
+        # Initialize database manager
         self.db_manager = DatabaseManager()
-        await self.db_manager.initialize()
+
+        # Initialize ordering service
+        from bot.services.ordering import OrderingService
+        self.ordering_service = OrderingService(self)
 
         # Run database migrations
         await run_migrations(self.db_manager)

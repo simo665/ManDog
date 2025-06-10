@@ -336,17 +336,7 @@ class QuantityNotesModal(discord.ui.Modal):
             self.listing_data['quantity'] = quantity
             self.listing_data['notes'] = self.notes_input.value
 
-            # Show date/time selection
-            view = DateTimeSelectView(self.bot, self.listing_data)
-            embed = discord.Embed(
-                title="📅 Pick Date and Time",
-                description="Select when you want this listing to be active:",
-                color=0x1E40AF
-            )
-
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-            # Set a default scheduled_time since we're not using the date/time selection
+            # Set a default scheduled_time and create the listing immediately
             from datetime import datetime
             self.listing_data['scheduled_time'] = datetime.now()
 
@@ -362,7 +352,23 @@ class QuantityNotesModal(discord.ui.Modal):
                 listing_data=self.listing_data
             )
 
-            logger.info(f"📝 MODAL DEBUG: Created listing with ID: {listing_id}")
+            if listing_id:
+                # Send confirmation
+                from bot.ui.embeds import MarketplaceEmbeds
+                embeds = MarketplaceEmbeds()
+                embed = embeds.create_listing_confirmation_embed(
+                    self.listing_data['listing_type'],
+                    self.listing_data['item'],
+                    self.listing_data['scheduled_time']
+                )
+
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                logger.info(f"📝 MODAL DEBUG: Created listing with ID: {listing_id}")
+            else:
+                await interaction.response.send_message(
+                    "❌ Failed to create listing",
+                    ephemeral=True
+                )
 
         except Exception as e:
             logger.error(f"Error in quantity/notes modal submission: {e}")

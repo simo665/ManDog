@@ -25,10 +25,7 @@ class OrderConfirmationView(discord.ui.View):
         try:
             await interaction.response.defer()
 
-            ordering_service = self.bot.get_cog('OrderingService')
-            if not ordering_service:
-                from bot.services.ordering import OrderingService
-                ordering_service = OrderingService(self.bot)
+            ordering_service = self.bot.ordering_service
 
             success = await ordering_service.handle_order_confirmation(
                 self.order_id, interaction.user.id, True
@@ -66,10 +63,7 @@ class OrderConfirmationView(discord.ui.View):
         try:
             await interaction.response.defer()
 
-            ordering_service = self.bot.get_cog('OrderingService')
-            if not ordering_service:
-                from bot.services.ordering import OrderingService
-                ordering_service = OrderingService(self.bot)
+            ordering_service = self.bot.ordering_service
 
             success = await ordering_service.handle_order_confirmation(
                 self.order_id, interaction.user.id, False
@@ -174,10 +168,7 @@ class RatingModal(discord.ui.Modal):
 
             await interaction.response.defer()
 
-            ordering_service = self.bot.get_cog('OrderingService')
-            if not ordering_service:
-                from bot.services.ordering import OrderingService
-                ordering_service = OrderingService(self.bot)
+            ordering_service = self.bot.ordering_service
 
             success = await ordering_service.handle_rating_submission(
                 self.order_id, interaction.user.id, self.rated_user_id, rating, comment
@@ -225,10 +216,7 @@ class RatingModerationView(discord.ui.View):
         try:
             await interaction.response.defer()
 
-            ordering_service = self.bot.get_cog('OrderingService')
-            if not ordering_service:
-                from bot.services.ordering import OrderingService
-                ordering_service = OrderingService(self.bot)
+            ordering_service = self.bot.ordering_service
 
             success = await ordering_service.handle_admin_rating_decision(
                 self.order_id, self.rater_id, self.rated_id, 
@@ -269,10 +257,7 @@ class RatingModerationView(discord.ui.View):
         try:
             await interaction.response.defer()
 
-            ordering_service = self.bot.get_cog('OrderingService')
-            if not ordering_service:
-                from bot.services.ordering import OrderingService
-                ordering_service = OrderingService(self.bot)
+            ordering_service = self.bot.ordering_service
 
             success = await ordering_service.handle_admin_rating_decision(
                 self.order_id, self.rater_id, self.rated_id, 
