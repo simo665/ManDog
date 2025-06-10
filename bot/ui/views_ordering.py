@@ -48,8 +48,10 @@ class OrderConfirmationView(discord.ui.View):
                     item.disabled = True
 
                 await interaction.edit_original_response(embed=embed, view=self)
+                logger.info(f"✅ BUTTON DEBUG: Successfully confirmed trade {self.order_id}")
             else:
-                await interaction.followup.send("❌ Failed to confirm trade", ephemeral=True)
+                logger.error(f"❌ BUTTON DEBUG: Failed to confirm trade {self.order_id}")
+                await interaction.followup.send("❌ Failed to confirm trade - order may have expired", ephemeral=True)
 
         except Exception as e:
             logger.error(f"Error confirming trade: {e}")
@@ -69,23 +71,28 @@ class OrderConfirmationView(discord.ui.View):
                 from bot.services.ordering import OrderingService
                 ordering_service = OrderingService(self.bot)
 
-            await ordering_service.handle_order_confirmation(
+            success = await ordering_service.handle_order_confirmation(
                 self.order_id, interaction.user.id, False
             )
 
-            # Update the message
-            embed = discord.Embed(
-                title="❌ Trade Declined",
-                description="You have declined this trade.",
-                color=0xFF0000,
-                timestamp=datetime.now(timezone.utc)
-            )
+            if success:
+                # Update the message
+                embed = discord.Embed(
+                    title="❌ Trade Declined",
+                    description="You have declined this trade. The other party has been notified.",
+                    color=0xFF0000,
+                    timestamp=datetime.now(timezone.utc)
+                )
 
-            # Disable buttons
-            for item in self.children:
-                item.disabled = True
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
 
-            await interaction.edit_original_response(embed=embed, view=self)
+                await interaction.edit_original_response(embed=embed, view=self)
+                logger.info(f"✅ BUTTON DEBUG: Successfully declined trade {self.order_id}")
+            else:
+                logger.error(f"❌ BUTTON DEBUG: Failed to decline trade {self.order_id}")
+                await interaction.followup.send("❌ Failed to decline trade - it may have already been processed", ephemeral=True)
 
         except Exception as e:
             logger.error(f"Error declining trade: {e}")

@@ -138,8 +138,9 @@ class OrderingService:
             logger.info(f"📨 ORDER DEBUG: Guild: {guild.name}, Requester: {requester.display_name}, Matcher: {matcher.display_name}")
             logger.info(f"📨 ORDER DEBUG: Requester type: {requester_type}, Zone: {zone}, Item: '{item}'")
             
-            # Create unique order ID
-            order_id = f"{guild.id}_{requester.id}_{matcher.id}_{int(datetime.now().timestamp())}"
+            # Create unique order ID with microseconds to prevent duplicates
+            timestamp = datetime.now().timestamp()
+            order_id = f"{guild.id}_{requester.id}_{matcher.id}_{int(timestamp * 1000000)}"
             logger.info(f"📨 ORDER DEBUG: Generated order ID: {order_id}")
 
             # Determine buyer and seller
@@ -268,28 +269,48 @@ class OrderingService:
     async def handle_order_confirmation(self, order_id: str, user_id: int, confirmed: bool):
         """Handle order confirmation response."""
         try:
+            logger.info(f"🔄 CONFIRMATION DEBUG: Handling confirmation for order {order_id} by user {user_id}")
+            logger.info(f"🔄 CONFIRMATION DEBUG: Confirmed: {confirmed}")
+            logger.info(f"🔄 CONFIRMATION DEBUG: Pending orders: {list(self.pending_confirmations.keys())}")
+            
             if order_id not in self.pending_confirmations:
-                logger.warning(f"Order {order_id} not found in pending confirmations")
+                logger.warning(f"❌ CONFIRMATION DEBUG: Order {order_id} not found in pending confirmations")
+                logger.warning(f"❌ CONFIRMATION DEBUG: Available orders: {list(self.pending_confirmations.keys())}")
                 return False
 
             order_data = self.pending_confirmations[order_id]
+            logger.info(f"🔄 CONFIRMATION DEBUG: Found order data for {order_id}")
+
+            # Verify user is part of this order
+            if user_id not in [order_data['buyer_id'], order_data['seller_id']]:
+                logger.warning(f"❌ CONFIRMATION DEBUG: User {user_id} not part of order {order_id}")
+                return False
 
             if confirmed:
                 order_data['confirmations'].add(user_id)
-                logger.info(f"User {user_id} confirmed order {order_id}")
+                logger.info(f"✅ CONFIRMATION DEBUG: User {user_id} confirmed order {order_id}")
+                logger.info(f"🔄 CONFIRMATION DEBUG: Current confirmations: {order_data['confirmations']}")
 
                 # Check if both parties confirmed
-                if (order_data['buyer_id'] in order_data['confirmations'] and 
-                    order_data['seller_id'] in order_data['confirmations']):
+                buyer_confirmed = order_data['buyer_id'] in order_data['confirmations']
+                seller_confirmed = order_data['seller_id'] in order_data['confirmations']
+                
+                logger.info(f"🔄 CONFIRMATION DEBUG: Buyer confirmed: {buyer_confirmed}, Seller confirmed: {seller_confirmed}")
 
+                if buyer_confirmed and seller_confirmed:
+                    logger.info(f"🎉 CONFIRMATION DEBUG: Both parties confirmed! Completing order {order_id}")
                     # Both confirmed - proceed to trade completion
                     await self.complete_order(order_id)
                     return True
+                else:
+                    logger.info(f"⏳ CONFIRMATION DEBUG: Waiting for other party to confirm")
+                    return True
             else:
-                # Order declined
-                logger.info(f"User {user_id} declined order {order_id}")
-                await self.cancel_order(order_id, "declined")
-                return False
+                # Order declined - notify other party
+                user_role = "buyer" if user_id == order_data['buyer_id'] else "seller"
+                logger.info(f"❌ CONFIRMATION DEBUG: User {user_id} ({user_role}) declined order {order_id}")
+                await self.cancel_order(order_id, f"declined by {user_role}")
+                return True  # Return True because the decline was processed successfully
 
         except Exception as e:
             logger.error(f"Error handling order confirmation: {e}")
@@ -394,10 +415,11 @@ class OrderingService:
             logger.error(f"Error completing order: {e}")
 
     async def cancel_order(self, order_id: str, reason: str):
-        """Cancel an order."""
+        """Cancel an order and notify both parties."""
         try:
             order_data = self.pending_confirmations.pop(order_id, None)
             if not order_data:
+                logger.warning(f"Order {order_id} not found for cancellation")
                 return
 
             guild = self.bot.get_guild(order_data['guild_id'])
@@ -414,13 +436,31 @@ class OrderingService:
                 timestamp=datetime.now(timezone.utc)
             )
 
-            # Notify both parties
+            cancel_embed.add_field(
+                name="🎯 Item",
+                value=order_data['item'],
+                inline=True
+            )
+
+            cancel_embed.add_field(
+                name="📍 Zone",
+                value=order_data['zone'].title(),
+                inline=True
+            )
+
+            # Notify both parties and update their messages
+            from bot.ui.views_ordering import OrderConfirmationView
+            
             for member in [buyer, seller]:
                 if member:
                     try:
+                        # Send cancellation message
                         await member.send(embed=cancel_embed)
+                        logger.info(f"Sent cancellation notification to {member.display_name}")
                     except discord.Forbidden:
-                        pass
+                        logger.warning(f"Cannot send DM to {member.display_name}")
+                    except Exception as dm_error:
+                        logger.error(f"Error sending cancellation DM to {member.display_name}: {dm_error}")
 
             logger.info(f"Order {order_id} cancelled: {reason}")
 
