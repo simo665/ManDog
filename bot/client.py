@@ -34,6 +34,7 @@ class MandokBot(commands.Bot):
 
         # Initialize database manager
         self.db_manager = DatabaseManager()
+        await self.db_manager.initialize()
 
         # Initialize ordering service
         from bot.services.ordering import OrderingService
