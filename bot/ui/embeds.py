@@ -90,8 +90,9 @@ class MarketplaceEmbeds:
     
     def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]], page: int = 0) -> discord.Embed:
         """Create the main marketplace embed for a channel with pagination."""
-        title_emoji = "🔸" if listing_type == "WTS" else "🔹"
-        color = self.COLORS['wts'] if listing_type == "WTS" else self.COLORS['wtb']
+        # Ensure we always use the correct title and color based on the provided listing_type
+        title_emoji = "🔸" if listing_type.upper() == "WTS" else "🔹"
+        color = self.COLORS['wts'] if listing_type.upper() == "WTS" else self.COLORS['wtb']
         
         # Calculate pagination
         items_per_page = 10
@@ -123,9 +124,14 @@ class MarketplaceEmbeds:
                 inline=False
             )
         else:
-            # Group listings by subcategory
+            # Group listings by subcategory, with additional validation
             grouped = {}
             for listing in page_listings:
+                # Skip listings that don't match the expected listing type
+                if listing.get('listing_type', '').upper() != listing_type.upper():
+                    logger.warning(f"Skipping mismatched listing in embed: expected {listing_type}, got {listing.get('listing_type')}")
+                    continue
+                
                 subcat = listing.get('subcategory', 'Other')
                 if subcat not in grouped:
                     grouped[subcat] = []

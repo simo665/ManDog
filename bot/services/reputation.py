@@ -244,6 +244,130 @@ class ReputationService:
             logger.error(f"Error calculating reliability score: {e}")
             return 0.0
     
+    def calculate_trader_score(self, user_data: Dict[str, Any], transaction_stats: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate comprehensive trader score with multiple metrics."""
+        try:
+            avg_rating = user_data['reputation_avg']
+            rating_count = user_data['reputation_count']
+            activity_score = user_data['activity_score']
+            
+            # Transaction-based metrics
+            total_transactions = transaction_stats.get('total_transactions', 0)
+            completed_transactions = transaction_stats.get('completed_transactions', 0)
+            completion_rate = (completed_transactions / total_transactions * 100) if total_transactions > 0 else 0
+            
+            # Core reputation score (40% weight)
+            reputation_score = (avg_rating / 5.0) * 100 if rating_count > 0 else 50
+            
+            # Transaction reliability (30% weight)
+            transaction_score = completion_rate
+            
+            # Activity score (20% weight) - normalized to 0-100
+            activity_normalized = min(activity_score / 50.0 * 100, 100)
+            
+            # Consistency bonus (10% weight) - based on rating distribution
+            consistency_score = self.calculate_consistency_score(user_data.get('user_id'))
+            
+            # Weighted final score
+            final_score = (
+                reputation_score * 0.4 +
+                transaction_score * 0.3 +
+                activity_normalized * 0.2 +
+                consistency_score * 0.1
+            )
+            
+            # Experience modifier based on transaction count
+            experience_modifier = min(total_transactions / 20.0, 1.0)  # Full experience at 20+ transactions
+            final_score = final_score * (0.7 + 0.3 * experience_modifier)  # Minimum 70% of score for new traders
+            
+            return {
+                'overall_score': round(final_score, 1),
+                'reputation_score': round(reputation_score, 1),
+                'transaction_score': round(transaction_score, 1),
+                'activity_score': round(activity_normalized, 1),
+                'consistency_score': round(consistency_score, 1),
+                'experience_level': self.get_experience_level(total_transactions),
+                'trader_tier': self.get_trader_tier(final_score, rating_count, total_transactions)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating trader score: {e}")
+            return {
+                'overall_score': 0.0,
+                'reputation_score': 0.0,
+                'transaction_score': 0.0,
+                'activity_score': 0.0,
+                'consistency_score': 0.0,
+                'experience_level': 'New',
+                'trader_tier': 'Unrated'
+            }
+    
+    async def calculate_consistency_score(self, user_id: int) -> float:
+        """Calculate consistency score based on rating distribution."""
+        try:
+            if not user_id:
+                return 50.0
+            
+            # Get rating distribution
+            ratings = await self.bot.db_manager.execute_query(
+                """
+                SELECT rating, COUNT(*) as count
+                FROM reputation
+                WHERE target_id = $1
+                GROUP BY rating
+                ORDER BY rating
+                """,
+                user_id
+            )
+            
+            if not ratings:
+                return 50.0  # Neutral score for no ratings
+            
+            total_ratings = sum(r['count'] for r in ratings)
+            
+            # Calculate variance - lower variance = higher consistency
+            mean_rating = sum(r['rating'] * r['count'] for r in ratings) / total_ratings
+            variance = sum(r['count'] * (r['rating'] - mean_rating) ** 2 for r in ratings) / total_ratings
+            
+            # Convert variance to consistency score (0-100, higher is better)
+            # Maximum variance is 4 (ratings 1 and 5 only), so we invert it
+            consistency_score = max(0, 100 - (variance / 4.0 * 100))
+            
+            return consistency_score
+            
+        except Exception as e:
+            logger.error(f"Error calculating consistency score: {e}")
+            return 50.0
+    
+    def get_experience_level(self, transaction_count: int) -> str:
+        """Get experience level based on transaction count."""
+        if transaction_count >= 50:
+            return "Veteran"
+        elif transaction_count >= 20:
+            return "Experienced"
+        elif transaction_count >= 10:
+            return "Intermediate"
+        elif transaction_count >= 5:
+            return "Novice"
+        else:
+            return "New"
+    
+    def get_trader_tier(self, overall_score: float, rating_count: int, transaction_count: int) -> str:
+        """Get trader tier based on overall performance."""
+        # Require minimum ratings and transactions for higher tiers
+        if overall_score >= 85 and rating_count >= 20 and transaction_count >= 15:
+            return "Elite Trader"
+        elif overall_score >= 75 and rating_count >= 10 and transaction_count >= 8:
+            return "Master Trader"
+        elif overall_score >= 65 and rating_count >= 5 and transaction_count >= 5:
+            return "Skilled Trader"
+        elif overall_score >= 50 and rating_count >= 2 and transaction_count >= 2:
+            return "Regular Trader"
+        elif rating_count > 0 or transaction_count > 0:
+            return "Rookie Trader"
+        else:
+            return "Unrated"
+    
     async def get_reputation_leaderboard(self, guild_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Get reputation leaderboard for a guild."""
         try:
