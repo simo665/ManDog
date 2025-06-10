@@ -88,6 +88,8 @@ class DatabaseManager:
         try:
             # Determine channel type and zone from channel name
             channel_name = channel.name.lower()
+            
+            # Extract listing type
             if "wts" in channel_name or "🔸" in channel_name:
                 listing_type = "WTS"
             elif "wtb" in channel_name or "🔹" in channel_name:
@@ -95,8 +97,24 @@ class DatabaseManager:
             else:
                 listing_type = "UNKNOWN"
             
-            # Extract zone from channel name
-            zone = channel_name.split("-")[-1] if "-" in channel_name else "unknown"
+            # Extract zone from channel name - improved logic
+            zone = "unknown"
+            
+            # Remove emoji and common prefixes to get the zone
+            clean_name = channel_name
+            for prefix in ["🔸", "🔹", "wts-", "wtb-"]:
+                clean_name = clean_name.replace(prefix, "")
+            
+            # Remove common suffixes
+            for suffix in ["-marketplace", "-market"]:
+                clean_name = clean_name.replace(suffix, "")
+            
+            # Clean up and validate
+            clean_name = clean_name.strip("-_ ")
+            if clean_name and len(clean_name) > 1:
+                zone = clean_name
+            
+            logger.info(f"Storing channel info: {channel.name} -> Type: {listing_type}, Zone: {zone}")
             
             command = """
                 INSERT INTO marketplace_channels (guild_id, channel_id, listing_type, zone)
@@ -109,7 +127,7 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error storing channel info: {e}")
             raise
-    
+        
     async def store_marketplace_message(self, guild_id: int, channel_id: int, message_id: int, listing_type: str, zone: str):
         """Store marketplace persistent message information."""
         try:
@@ -118,11 +136,84 @@ class DatabaseManager:
                 SET message_id = $1 
                 WHERE guild_id = $2 AND channel_id = $3
             """
-            await self.execute_command(command, message_id, guild_id, channel_id)
+            result = await self.execute_command(command, message_id, guild_id, channel_id)
+            
+            # If no rows were updated, the channel info doesn't exist, so insert it
+            if "UPDATE 0" in result:
+                logger.warning(f"Channel {channel_id} not found in database, inserting...")
+                insert_command = """
+                    INSERT INTO marketplace_channels (guild_id, channel_id, message_id, listing_type, zone)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (channel_id) 
+                    DO UPDATE SET message_id = $3, listing_type = $4, zone = $5
+                """
+                await self.execute_command(insert_command, guild_id, channel_id, message_id, listing_type, zone)
             
         except Exception as e:
             logger.error(f"Error storing marketplace message: {e}")
             raise
+    
+    async def get_guild_channels(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get all marketplace channels for a guild."""
+        try:
+            query = """
+                SELECT channel_id, listing_type, zone, message_id
+                FROM marketplace_channels 
+                WHERE guild_id = $1
+            """
+            return await self.execute_query(query, guild_id)
+            
+        except Exception as e:
+            logger.error(f"Error getting guild channels: {e}")
+            return []
+    
+    async def cleanup_invalid_channels(self, channel_ids: List[int]):
+        """Remove database entries for channels that no longer exist."""
+        try:
+            if not channel_ids:
+                return
+                
+            # Convert list to PostgreSQL array format
+            placeholders = ','.join(f'${i+1}' for i in range(len(channel_ids)))
+            
+            command = f"""
+                DELETE FROM marketplace_channels 
+                WHERE channel_id = ANY(ARRAY[{placeholders}])
+            """
+            
+            result = await self.execute_command(command, *channel_ids)
+            logger.info(f"Cleaned up {len(channel_ids)} invalid channel entries: {result}")
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up invalid channels: {e}")
+            raise
+    
+    async def cleanup_channel_data(self, channel_id: int):
+        """Clean up data for a specific channel."""
+        try:
+            # Remove the channel from marketplace_channels
+            await self.execute_command(
+                "DELETE FROM marketplace_channels WHERE channel_id = $1",
+                channel_id
+            )
+            
+            logger.info(f"Cleaned up data for channel {channel_id}")
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up channel data: {e}")
+    
+    async def verify_channel_exists(self, guild_id: int, channel_id: int) -> bool:
+        """Verify if a channel exists in the database."""
+        try:
+            result = await self.execute_query(
+                "SELECT 1 FROM marketplace_channels WHERE guild_id = $1 AND channel_id = $2",
+                guild_id, channel_id
+            )
+            return len(result) > 0
+            
+        except Exception as e:
+            logger.error(f"Error verifying channel exists: {e}")
+            return False
     
     async def create_listing(self, user_id: int, guild_id: int, listing_type: str, zone: str, 
                            subcategory: str, item: str, quantity: int, notes: str, 

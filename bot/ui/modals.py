@@ -132,21 +132,63 @@ class DateTimeSelectView(discord.ui.View):
         pass
 
     async def refresh_original_embed(self, interaction: discord.Interaction):
-        """Refresh the original marketplace embed directly."""
-        # Get the original message
-        message = interaction.message
-        if message:
-            # Get the embeds from the original message
-            embeds = message.embeds
-
-            # If there are embeds, update the message
-            if embeds:
-                await message.edit(embeds=embeds)
-            else:
-                logger.warning("Original message has no embeds.")
-        else:
-            logger.warning("Could not retrieve original message to refresh.")
-
+        """Refresh the original marketplace embed with updated listings."""
+        try:
+            # The interaction is happening in the marketplace channel
+            channel = interaction.channel
+            
+            if not channel:
+                logger.warning("Could not get channel from interaction")
+                return
+            
+            # Fetch the first (and should be only) message in the channel
+            try:
+                messages = [message async for message in channel.history(limit=1)]
+                if not messages:
+                    logger.warning(f"No messages found in channel {channel.name}")
+                    return
+                
+                message = messages[0]
+            except discord.Forbidden:
+                logger.warning(f"No permission to read message history in {channel.name}")
+                return
+            except Exception as e:
+                logger.error(f"Error fetching message from {channel.name}: {e}")
+                return
+            
+            # Get updated listings
+            listings = await self.bot.db_manager.get_zone_listings(
+                interaction.guild.id,
+                self.listing_data['listing_type'],
+                self.listing_data['zone']
+            )
+            
+            # Create updated embed
+            from bot.ui.embeds import MarketplaceEmbeds
+            embeds = MarketplaceEmbeds()
+            updated_embed = embeds.create_marketplace_embed(
+                self.listing_data['listing_type'],
+                self.listing_data['zone'],
+                listings,
+                0  # Reset to first page
+            )
+            
+            # Create updated view
+            from bot.ui.views import MarketplaceView
+            updated_view = MarketplaceView(
+                self.bot,
+                self.listing_data['listing_type'],
+                self.listing_data['zone'],
+                0  # Reset to first page
+            )
+            
+            # Update the original marketplace message
+            await message.edit(embed=updated_embed, view=updated_view)
+            logger.info(f"Successfully refreshed marketplace embed for {channel.name}")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing original embed: {e}")
+            
 class ListingModal(discord.ui.Modal):
     """Modal for creating a new listing (legacy - use QuantityNotesModal instead)."""
 

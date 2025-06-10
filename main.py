@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Mandok - Discord Marketplace Bot for FFXI
-Main entry point for the bot application.
-"""
-
 import asyncio
 import logging
 import os

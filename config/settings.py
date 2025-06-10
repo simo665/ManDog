@@ -1,11 +1,10 @@
-"""
-Configuration settings for the Mandok marketplace bot.
-"""
-
 import os
 import logging
 import discord
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
