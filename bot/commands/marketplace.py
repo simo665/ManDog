@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import Optional
+from datetime import datetime, timezone
 
 from bot.ui.embeds import MarketplaceEmbeds
 from bot.ui.views import SetupView, MarketplaceView
@@ -160,7 +161,9 @@ class MarketplaceCommands(commands.Cog):
 
                     # Create persistent embed and view
                     try:
-                        await self.setup_channel_embed(channel, category_name.split()[0], channel_name)
+                        # Extract proper listing type from category name
+                        listing_type = "WTS" if "WTS" in category_name else "WTB"
+                        await self.setup_channel_embed(channel, listing_type, channel_name)
                         created_channels.append(channel)
                         logger.info(f"Set up embed for channel: {name_with_emoji}")
                     except Exception as e:
@@ -252,3 +255,79 @@ class MarketplaceCommands(commands.Cog):
         except Exception as e:
             logger.error(f"Error setting up channel embed for {channel.name}: {e}")
             raise
+
+    @discord.app_commands.command(name="cleanup", description="Clean up expired listings")
+    async def cleanup_listings(self, interaction: discord.Interaction):
+        """Manually clean up expired listings."""
+        try:
+            if not is_admin(interaction.user, interaction.guild):
+                await interaction.response.send_message(
+                    "❌ You need admin permissions to use this command.", ephemeral=True
+                )
+                return
+
+            # Clean up expired listings
+            expired_count = await self.bot.db_manager.cleanup_expired_listings()
+
+            await interaction.response.send_message(
+                f"🧹 Cleaned up {expired_count} expired listings.", ephemeral=True
+            )
+
+        except Exception as e:
+            logger.error(f"Error cleaning up listings: {e}")
+            await interaction.response.send_message(
+                "An error occurred while cleaning up listings.", ephemeral=True
+            )
+
+    @discord.app_commands.command(name="setratingconfig", description="Configure rating moderation settings")
+    @discord.app_commands.describe(
+        admin_channel="Channel where low rating disputes will be sent for admin review",
+        threshold="Ratings below this value will require admin approval (default: 3)"
+    )
+    async def set_rating_config(self, interaction: discord.Interaction, 
+                              admin_channel: discord.TextChannel, 
+                              threshold: int = 3):
+        """Configure rating moderation settings."""
+        try:
+            if not is_admin(interaction.user, interaction.guild):
+                await interaction.response.send_message(
+                    "❌ You need admin permissions to use this command.", ephemeral=True
+                )
+                return
+
+            if threshold < 1 or threshold > 5:
+                await interaction.response.send_message(
+                    "❌ Threshold must be between 1 and 5.", ephemeral=True
+                )
+                return
+
+            # Store rating configuration
+            await self.bot.db_manager.execute_command(
+                """
+                INSERT INTO guild_rating_configs (guild_id, admin_channel_id, low_rating_threshold, updated_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (guild_id)
+                DO UPDATE SET 
+                    admin_channel_id = $2,
+                    low_rating_threshold = $3,
+                    updated_at = $4
+                """,
+                interaction.guild.id, admin_channel.id, threshold, datetime.now(timezone.utc)
+            )
+
+            await interaction.response.send_message(
+                f"✅ Rating configuration updated!\n"
+                f"📝 Admin Channel: {admin_channel.mention}\n"
+                f"⚠️ Low Rating Threshold: {threshold}/5 stars\n"
+                f"Ratings below {threshold} stars will be sent to {admin_channel.mention} for admin review.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            logger.error(f"Error setting rating config: {e}")
+            await interaction.response.send_message(
+                "An error occurred while setting rating configuration.", ephemeral=True
+            )
+
+def setup(bot):
+    bot.add_cog(MarketplaceCommands(bot))

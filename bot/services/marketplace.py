@@ -1,4 +1,3 @@
-
 """
 Core marketplace business logic and services.
 """
@@ -37,10 +36,10 @@ class MarketplaceService:
             zone = channel_data['zone']
             message_id = channel_data['message_id']
 
-            # Skip invalid zones
+            # Log zone info but don't skip - let the database query handle it
             if not zone or zone == "unknown":
-                logger.warning(f"Skipping refresh for invalid zone: {zone}")
-                return
+                logger.warning(f"Zone appears invalid: {zone}, but proceeding with refresh")
+                # Don't return here - continue with the refresh
 
             # Get active listings ONLY for this specific listing type and zone
             listings = await self.bot.db_manager.get_zone_listings(guild_id, listing_type, zone)
@@ -139,7 +138,7 @@ class MarketplaceService:
                 # This will find matches and initiate order confirmation workflow
                 logger.info(f"🚀 MARKETPLACE DEBUG: Triggering match search for listing {listing_id}")
                 logger.info(f"🚀 MARKETPLACE DEBUG: Search params - User: {user_id}, Type: {listing_data['listing_type']}, Zone: {listing_data['zone']}, Item: '{listing_data['item']}'")
-                
+
                 match_found = await ordering_service.find_and_notify_matches(
                     user_id, guild_id, listing_data['listing_type'], 
                     listing_data['zone'], listing_data['item']
@@ -161,10 +160,9 @@ class MarketplaceService:
     async def refresh_marketplace_embeds_for_zone(self, guild_id: int, listing_type: str, zone: str):
         """Refresh all marketplace embeds for a specific zone."""
         try:
-            # Skip invalid zones
+            # Log zone info but don't skip
             if not zone or zone == "unknown":
-                logger.warning(f"Skipping refresh for invalid zone: {zone}")
-                return
+                logger.warning(f"Zone appears invalid: {zone}, but proceeding with refresh")
 
             # Get channel for this listing type and zone
             channels = await self.bot.db_manager.execute_query(
@@ -181,10 +179,9 @@ class MarketplaceService:
     async def refresh_marketplace_embed_in_current_channel(self, interaction, listing_type: str, zone: str):
         """Refresh the marketplace embed in the current channel where interaction happened."""
         try:
-            # Skip invalid zones
+            # Log zone info but don't skip
             if not zone or zone == "unknown":
-                logger.warning(f"Skipping refresh for invalid zone: {zone}")
-                return
+                logger.warning(f"Zone appears invalid: {zone}, but proceeding with refresh")
 
             # Check if current channel is a marketplace channel
             channel_info = await self.bot.db_manager.execute_query(

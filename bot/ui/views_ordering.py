@@ -27,12 +27,28 @@ class OrderConfirmationView(discord.ui.View):
 
             ordering_service = self.bot.ordering_service
 
-            success = await ordering_service.handle_order_confirmation(
+            result = await ordering_service.handle_order_confirmation(
                 self.order_id, interaction.user.id, True
             )
 
-            if success:
-                # Update the message
+            if result == "both_confirmed":
+                # Both parties confirmed - show completion message
+                embed = discord.Embed(
+                    title="🎉 Trade Confirmed!",
+                    description="Both parties have confirmed the trade! Please check your DMs for rating and completion instructions.",
+                    color=0x00FF00,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+                logger.info(f"✅ BUTTON DEBUG: Both parties confirmed trade {self.order_id}")
+
+            elif result == "waiting":
+                # Only this user confirmed - show waiting message
                 embed = discord.Embed(
                     title="✅ Trade Confirmed",
                     description="You have confirmed this trade. Waiting for the other party to confirm.",
@@ -46,6 +62,7 @@ class OrderConfirmationView(discord.ui.View):
 
                 await interaction.edit_original_response(embed=embed, view=self)
                 logger.info(f"✅ BUTTON DEBUG: Successfully confirmed trade {self.order_id}")
+
             else:
                 logger.error(f"❌ BUTTON DEBUG: Failed to confirm trade {self.order_id}")
                 await interaction.followup.send("❌ Failed to confirm trade - order may have expired", ephemeral=True)
@@ -65,11 +82,11 @@ class OrderConfirmationView(discord.ui.View):
 
             ordering_service = self.bot.ordering_service
 
-            success = await ordering_service.handle_order_confirmation(
+            result = await ordering_service.handle_order_confirmation(
                 self.order_id, interaction.user.id, False
             )
 
-            if success:
+            if result:
                 # Update the message
                 embed = discord.Embed(
                     title="❌ Trade Declined",
@@ -323,12 +340,6 @@ class RatingModerationView(discord.ui.View):
 
                 await interaction.edit_original_response(embed=embed, view=self)
 
-                # Archive the channel after 5 minutes
-                await interaction.followup.send("This channel will be archived in 5 minutes.")
-                import asyncio
-                await asyncio.sleep(300)
-                await interaction.channel.delete(reason="Rating moderation completed")
-
         except Exception as e:
             logger.error(f"Error approving rating: {e}")
             try:
@@ -364,12 +375,6 @@ class RatingModerationView(discord.ui.View):
 
                 await interaction.edit_original_response(embed=embed, view=self)
 
-                # Archive the channel after 5 minutes
-                await interaction.followup.send("This channel will be archived in 5 minutes.")
-                import asyncio
-                await asyncio.sleep(300)
-                await interaction.channel.delete(reason="Rating moderation completed")
-
         except Exception as e:
             logger.error(f"Error rejecting rating: {e}")
             try:
@@ -395,3 +400,114 @@ class RatingView(discord.ui.View):
     def __init__(self, bot):
         super().__init__(timeout=300)
         self.bot = bot
+
+class TradeRatingView(discord.ui.View):
+    """View for trade rating buttons."""
+
+    def __init__(self, bot, order_id: str, disabled_users: set = None):
+        super().__init__(timeout=3600)  # 1 hour timeout
+        self.bot = bot
+        self.order_id = order_id
+        self.disabled_users = disabled_users or set()
+
+        # Disable buttons if user has already rated
+        if self.disabled_users:
+            self.disable_buttons_for_users(self.disabled_users)
+
+    def disable_buttons_for_user(self, user_id: int):
+        """Disable buttons for a specific user."""
+        self.disabled_users.add(user_id)
+        self.disable_buttons_for_users({user_id})
+
+    def disable_buttons_for_users(self, user_ids: set):
+        """Disable buttons for specific users."""
+        # This will be checked in the button interactions
+        pass
+
+    @discord.ui.button(label="1⭐", style=discord.ButtonStyle.danger, emoji="1️⃣")
+    async def rate_1_star(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 1 star."""
+        if interaction.user.id in self.disabled_users:
+            await interaction.response.send_message("❌ You have already rated this trade.", ephemeral=True)
+            return
+        await self.handle_rating(interaction, 1)
+
+    @discord.ui.button(label="2⭐", style=discord.ButtonStyle.danger, emoji="2️⃣")
+    async def rate_2_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 2 stars."""
+        if interaction.user.id in self.disabled_users:
+            await interaction.response.send_message("❌ You have already rated this trade.", ephemeral=True)
+            return
+        await self.handle_rating(interaction, 2)
+
+    @discord.ui.button(label="3⭐", style=discord.ButtonStyle.secondary, emoji="3️⃣")
+    async def rate_3_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 3 stars."""
+        if interaction.user.id in self.disabled_users:
+            await interaction.response.send_message("❌ You have already rated this trade.", ephemeral=True)
+            return
+        await self.handle_rating(interaction, 3)
+
+    @discord.ui.button(label="4⭐", style=discord.ButtonStyle.success, emoji="4️⃣")
+    async def rate_4_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 4 stars."""
+        if interaction.user.id in self.disabled_users:
+            await interaction.response.send_message("❌ You have already rated this trade.", ephemeral=True)
+            return
+        await self.handle_rating(interaction, 4)
+
+    @discord.ui.button(label="5⭐", style=discord.ButtonStyle.success, emoji="5️⃣")
+    async def rate_5_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 5 stars."""
+        if interaction.user.id in self.disabled_users:
+            await interaction.response.send_message("❌ You have already rated this trade.", ephemeral=True)
+            return
+        await self.handle_rating(interaction, 5)
+
+    async def handle_rating(self, interaction: discord.Interaction, rating: int):
+        """Handle rating submission."""
+        try:
+            user_id = interaction.user.id
+            order_data = self.bot.ordering_service.pending_ratings.get(self.order_id)
+
+            if not order_data:
+                await interaction.response.send_message(
+                    "❌ This rating request has expired or is invalid.", ephemeral=True
+                )
+                return
+
+            # Check if user already rated
+            user_ratings = order_data.get('ratings', {})
+            if user_id in user_ratings:
+                await interaction.response.send_message(
+                    "❌ You have already rated this trade.", ephemeral=True
+                )
+                return
+
+            # Determine who they're rating
+            if user_id == order_data['buyer_id']:
+                rated_user_id = order_data['seller_id']
+                rated_username = order_data['seller_username']
+            elif user_id == order_data['seller_id']:
+                rated_user_id = order_data['buyer_id']
+                rated_username = order_data['buyer_username']
+            else:
+                await interaction.response.send_message(
+                    "❌ You are not authorized to rate this trade.", ephemeral=True
+                )
+                return
+
+            # Open modal for optional comment
+            modal = QuickRatingModal(self.bot, self.order_id, rated_user_id, rating)
+            await interaction.response.send_modal(modal)
+
+# Open modal for optional comment
+            modal = QuickRatingModal(self.bot, self.order_id, rated_user_id, rating)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            logger.error(f"Error handling rating: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred", ephemeral=True)
+            except:
+                pass

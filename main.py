@@ -11,25 +11,25 @@ def main():
     """Main entry point for the bot."""
     # Load environment variables
     load_dotenv()
-    
+
     # Setup logging
     setup_logging()
     logger = logging.getLogger(__name__)
-    
+
     # Validate required environment variables
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN not found in environment variables")
         return
-    
+
     if not DATABASE_URL:
         logger.error("DATABASE_URL not found in environment variables")
         return
-    
+
     logger.info("Starting Mandok Discord Bot...")
-    
+
     # Create and run the bot
     bot = MandokBot()
-    
+
     try:
         asyncio.run(bot.start(BOT_TOKEN))
     except KeyboardInterrupt:

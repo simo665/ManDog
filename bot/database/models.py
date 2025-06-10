@@ -84,6 +84,38 @@ class DatabaseSchema:
             );
         """,
         
+        'ratings': """
+            CREATE TABLE IF NOT EXISTS ratings (
+                id SERIAL PRIMARY KEY,
+                rater_id BIGINT NOT NULL,
+                rated_id BIGINT NOT NULL,
+                guild_id BIGINT NOT NULL,
+                order_id VARCHAR(100),
+                rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
+                status VARCHAR(20) DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'rejected')),
+                admin_id BIGINT,
+                admin_notes TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                reviewed_at TIMESTAMP WITH TIME ZONE,
+                FOREIGN KEY (rater_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                FOREIGN KEY (rated_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                FOREIGN KEY (admin_id) REFERENCES users(user_id) ON DELETE SET NULL
+            );
+        """,
+        
+        'guild_rating_configs': """
+            CREATE TABLE IF NOT EXISTS guild_rating_configs (
+                guild_id BIGINT PRIMARY KEY,
+                admin_channel_id BIGINT,
+                low_rating_threshold INTEGER DEFAULT 3,
+                require_admin_approval BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
+            );
+        """,
+        
         'queues': """
             CREATE TABLE IF NOT EXISTS queues (
                 id SERIAL PRIMARY KEY,
@@ -102,15 +134,18 @@ class DatabaseSchema:
         'transactions': """
             CREATE TABLE IF NOT EXISTS transactions (
                 id SERIAL PRIMARY KEY,
-                listing_id INTEGER NOT NULL,
+                listing_id INTEGER,
                 seller_id BIGINT NOT NULL,
                 buyer_id BIGINT NOT NULL,
+                item VARCHAR(200) NOT NULL,
+                zone VARCHAR(50) NOT NULL,
+                quantity INTEGER DEFAULT 1,
                 status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'completed', 'cancelled')),
                 seller_confirmed BOOLEAN DEFAULT FALSE,
                 buyer_confirmed BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 completed_at TIMESTAMP WITH TIME ZONE,
-                FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE,
+                FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE SET NULL,
                 FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
                 FOREIGN KEY (buyer_id) REFERENCES users(user_id) ON DELETE CASCADE
             );

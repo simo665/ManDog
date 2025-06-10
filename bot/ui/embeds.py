@@ -3,8 +3,11 @@ Embed creation utilities for the marketplace bot.
 """
 
 import discord
+import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class MarketplaceEmbeds:
     """Utility class for creating Discord embeds."""
@@ -160,7 +163,6 @@ class MarketplaceEmbeds:
                                 timestamp = int(scheduled_time.timestamp())
                             else:
                                 # Handle datetime objects that might not have timestamp method
-                                from datetime import datetime
                                 if isinstance(scheduled_time, datetime):
                                     timestamp = int(scheduled_time.timestamp())
                                 else:
