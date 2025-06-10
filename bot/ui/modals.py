@@ -350,7 +350,7 @@ class QuantityNotesModal(discord.ui.Modal):
             logger.info(f"📝 MODAL DEBUG: Creating listing for user {interaction.user.id}")
             logger.info(f"📝 MODAL DEBUG: Listing data: {self.listing_data}")
 
-            from bot.services.marketplace_service import MarketplaceService
+            from bot.services.marketplace import MarketplaceService
             marketplace_service = MarketplaceService(self.bot)
             listing_id = await marketplace_service.create_listing(
                 user_id=interaction.user.id,
