@@ -68,9 +68,6 @@ class MandokBot(commands.Bot):
     async def load_persistent_views(self):
         """Load persistent views for marketplace channels."""
         try:
-            # Clear any existing persistent views to prevent duplication
-            self._view_store.clear()
-
             # Get all marketplace channels with messages
             channels = await self.db_manager.execute_query(
                 "SELECT guild_id, channel_id, listing_type, zone, message_id FROM marketplace_channels WHERE message_id IS NOT NULL"
