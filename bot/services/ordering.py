@@ -24,6 +24,25 @@ class OrderingService:
             # Determine opposite listing type
             opposite_type = "WTS" if listing_type == "WTB" else "WTB"
 
+            logger.info(f"🔍 MATCHING DEBUG: Starting match search for user {user_id}")
+            logger.info(f"🔍 MATCHING DEBUG: Looking for {opposite_type} listings in {zone} zone for item '{item}'")
+            logger.info(f"🔍 MATCHING DEBUG: Original listing type: {listing_type}, Opposite type: {opposite_type}")
+
+            # First, let's see ALL listings in this zone to debug
+            all_zone_listings = await self.bot.db_manager.execute_query(
+                """
+                SELECT id, user_id, item, listing_type, zone, active, created_at
+                FROM listings 
+                WHERE guild_id = $1 AND zone = $2 AND active = TRUE
+                ORDER BY created_at DESC
+                """,
+                guild_id, zone
+            )
+
+            logger.info(f"🔍 MATCHING DEBUG: Found {len(all_zone_listings)} total active listings in {zone} zone:")
+            for listing in all_zone_listings:
+                logger.info(f"  - ID: {listing['id']}, User: {listing['user_id']}, Type: {listing['listing_type']}, Item: '{listing['item']}'")
+
             # Find matching listings
             matches = await self.bot.db_manager.execute_query(
                 """
@@ -36,8 +55,35 @@ class OrderingService:
                 guild_id, opposite_type, zone, item, user_id
             )
 
+            logger.info(f"🔍 MATCHING DEBUG: Query parameters:")
+            logger.info(f"  - guild_id: {guild_id}")
+            logger.info(f"  - opposite_type: {opposite_type}")
+            logger.info(f"  - zone: {zone}")
+            logger.info(f"  - item (lowercase): '{item.lower()}'")
+            logger.info(f"  - user_id (excluded): {user_id}")
+
+            logger.info(f"🔍 MATCHING DEBUG: Found {len(matches)} potential matches")
+
             if not matches:
-                logger.info(f"No matches found for {listing_type} {item} in {zone}")
+                logger.warning(f"❌ MATCHING DEBUG: No matches found for {listing_type} '{item}' in {zone}")
+                
+                # Let's check why - look for opposite type listings with similar items
+                similar_items = await self.bot.db_manager.execute_query(
+                    """
+                    SELECT id, user_id, item, listing_type
+                    FROM listings 
+                    WHERE guild_id = $1 AND listing_type = $2 AND zone = $3 AND active = TRUE
+                    ORDER BY created_at ASC
+                    """,
+                    guild_id, opposite_type, zone
+                )
+                
+                logger.info(f"🔍 MATCHING DEBUG: Available {opposite_type} listings in {zone}:")
+                for similar in similar_items:
+                    item_match = similar['item'].lower() == item.lower()
+                    user_match = similar['user_id'] != user_id
+                    logger.info(f"  - ID: {similar['id']}, User: {similar['user_id']}, Item: '{similar['item']}' | Item Match: {item_match}, User Different: {user_match}")
+                
                 return False
 
             # Get guild and users
@@ -53,20 +99,30 @@ class OrderingService:
 
             # Process each match
             matches_found = False
-            for match in matches:
+            for i, match in enumerate(matches):
                 matcher_id = match['user_id']
+                logger.info(f"🤝 MATCHING DEBUG: Processing match {i+1}/{len(matches)} - Matcher ID: {matcher_id}")
+                
                 matcher = guild.get_member(matcher_id)
 
                 if not matcher:
-                    logger.warning(f"Matcher {matcher_id} not found in guild")
+                    logger.warning(f"❌ MATCHING DEBUG: Matcher {matcher_id} not found in guild {guild.name}")
                     continue
 
-                # Initiate order confirmation
-                await self.initiate_order_confirmation(
-                    guild, requester, matcher, match, listing_type, zone, item
-                )
-                matches_found = True
+                logger.info(f"✅ MATCHING DEBUG: Found matcher: {matcher.display_name} ({matcher.id})")
+                logger.info(f"🤝 MATCHING DEBUG: Initiating order confirmation between {requester.display_name} and {matcher.display_name}")
 
+                # Initiate order confirmation
+                try:
+                    await self.initiate_order_confirmation(
+                        guild, requester, matcher, match, listing_type, zone, item
+                    )
+                    logger.info(f"✅ MATCHING DEBUG: Successfully initiated order confirmation for match {i+1}")
+                    matches_found = True
+                except Exception as init_error:
+                    logger.error(f"❌ MATCHING DEBUG: Failed to initiate order confirmation: {init_error}")
+
+            logger.info(f"🔍 MATCHING DEBUG: Final result - Matches found: {matches_found}")
             return matches_found
 
         except Exception as e:
@@ -78,8 +134,13 @@ class OrderingService:
                                         requester_type: str, zone: str, item: str):
         """Send order confirmation DMs to both parties."""
         try:
+            logger.info(f"📨 ORDER DEBUG: Starting order confirmation initiation")
+            logger.info(f"📨 ORDER DEBUG: Guild: {guild.name}, Requester: {requester.display_name}, Matcher: {matcher.display_name}")
+            logger.info(f"📨 ORDER DEBUG: Requester type: {requester_type}, Zone: {zone}, Item: '{item}'")
+            
             # Create unique order ID
             order_id = f"{guild.id}_{requester.id}_{matcher.id}_{int(datetime.now().timestamp())}"
+            logger.info(f"📨 ORDER DEBUG: Generated order ID: {order_id}")
 
             # Determine buyer and seller
             if requester_type == "WTB":
@@ -92,6 +153,8 @@ class OrderingService:
                 seller = requester
                 buyer_type = "WTS"
                 seller_type = "WTB"
+
+            logger.info(f"📨 ORDER DEBUG: Buyer: {buyer.display_name} ({buyer_type}), Seller: {seller.display_name} ({seller_type})")
 
             # Store order confirmation data
             self.pending_confirmations[order_id] = {
@@ -117,10 +180,13 @@ class OrderingService:
             buyer_view = OrderConfirmationView(self.bot, order_id, "buyer")
 
             try:
+                logger.info(f"📨 ORDER DEBUG: Attempting to send DM to buyer {buyer.display_name}")
                 await buyer.send(embed=buyer_embed, view=buyer_view)
-                logger.info(f"Sent order confirmation to buyer {buyer.display_name}")
+                logger.info(f"✅ ORDER DEBUG: Successfully sent order confirmation to buyer {buyer.display_name}")
             except discord.Forbidden:
-                logger.warning(f"Cannot DM buyer {buyer.display_name}")
+                logger.warning(f"❌ ORDER DEBUG: Cannot DM buyer {buyer.display_name} - DMs disabled")
+            except Exception as buyer_dm_error:
+                logger.error(f"❌ ORDER DEBUG: Failed to send DM to buyer {buyer.display_name}: {buyer_dm_error}")
 
             # Send to seller
             seller_embed = self.create_order_confirmation_embed(
@@ -129,10 +195,15 @@ class OrderingService:
             seller_view = OrderConfirmationView(self.bot, order_id, "seller")
 
             try:
+                logger.info(f"📨 ORDER DEBUG: Attempting to send DM to seller {seller.display_name}")
                 await seller.send(embed=seller_embed, view=seller_view)
-                logger.info(f"Sent order confirmation to seller {seller.display_name}")
+                logger.info(f"✅ ORDER DEBUG: Successfully sent order confirmation to seller {seller.display_name}")
             except discord.Forbidden:
-                logger.warning(f"Cannot DM seller {seller.display_name}")
+                logger.warning(f"❌ ORDER DEBUG: Cannot DM seller {seller.display_name} - DMs disabled")
+            except Exception as seller_dm_error:
+                logger.error(f"❌ ORDER DEBUG: Failed to send DM to seller {seller.display_name}: {seller_dm_error}")
+
+            logger.info(f"📨 ORDER DEBUG: Order confirmation process completed for order {order_id}")
 
         except Exception as e:
             logger.error(f"Error initiating order confirmation: {e}")

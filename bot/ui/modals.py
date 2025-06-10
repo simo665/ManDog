@@ -346,6 +346,20 @@ class QuantityNotesModal(discord.ui.Modal):
 
             await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+            # Create the listing
+            logger.info(f"📝 MODAL DEBUG: Creating listing for user {interaction.user.id}")
+            logger.info(f"📝 MODAL DEBUG: Listing data: {self.listing_data}")
+
+            from bot.services.marketplace_service import MarketplaceService
+            marketplace_service = MarketplaceService(self.bot)
+            listing_id = await marketplace_service.create_listing(
+                user_id=interaction.user.id,
+                guild_id=interaction.guild.id,
+                listing_data=self.listing_data
+            )
+
+            logger.info(f"📝 MODAL DEBUG: Created listing with ID: {listing_id}")
+
         except Exception as e:
             logger.error(f"Error in quantity/notes modal submission: {e}")
             await interaction.response.send_message(
@@ -519,4 +533,3 @@ class ReputationModal(discord.ui.Modal):
                 "❌ An error occurred while submitting your rating",
                 ephemeral=True
             )
-            

@@ -141,15 +141,18 @@ class MarketplaceService:
                 logger.info(f"Triggering match search for new listing {listing_id} by user {user_id}")
 
                 # This will find matches and initiate order confirmation workflow
+                logger.info(f"🚀 MARKETPLACE DEBUG: Triggering match search for listing {listing_id}")
+                logger.info(f"🚀 MARKETPLACE DEBUG: Search params - User: {user_id}, Type: {listing_data['listing_type']}, Zone: {listing_data['zone']}, Item: '{listing_data['item']}'")
+                
                 match_found = await ordering_service.find_and_notify_matches(
                     user_id, guild_id, listing_data['listing_type'], 
                     listing_data['zone'], listing_data['item']
                 )
 
                 if match_found:
-                    logger.info(f"Successfully triggered order confirmation workflow for listing {listing_id}")
+                    logger.info(f"✅ MARKETPLACE DEBUG: Successfully triggered order confirmation workflow for listing {listing_id}")
                 else:
-                    logger.info(f"No matches found for listing {listing_id}")
+                    logger.info(f"❌ MARKETPLACE DEBUG: No matches found for listing {listing_id}")
 
                 return listing_id
 

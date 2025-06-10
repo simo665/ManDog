@@ -38,17 +38,30 @@ class DatabaseManager:
             await self.pool.close()
             logger.info("Database connection pool closed")
 
-    async def execute_query(self, query: str, *args) -> List[Dict[str, Any]]:
-        """Execute a query and return results."""
-        if not self.pool:
-            raise RuntimeError("Database pool not initialized")
-
+    async def execute_query(self, query: str, *params) -> List[Dict[str, Any]]:
+        """Execute a SELECT query and return results."""
         async with self.pool.acquire() as connection:
             try:
-                rows = await connection.fetch(query, *args)
-                return [dict(row) for row in rows]
+                # Log queries that are related to matching
+                if "listings" in query and ("listing_type" in query or "zone" in query):
+                    logger.info(f"🗄️ DB DEBUG: Executing listing query")
+                    logger.info(f"🗄️ DB DEBUG: Query: {query}")
+                    logger.info(f"🗄️ DB DEBUG: Params: {params}")
+
+                rows = await connection.fetch(query, *params)
+                result = [dict(row) for row in rows]
+
+                # Log results for matching queries
+                if "listings" in query and ("listing_type" in query or "zone" in query):
+                    logger.info(f"🗄️ DB DEBUG: Query returned {len(result)} rows")
+                    for i, row in enumerate(result[:5]):  # Log first 5 rows
+                        logger.info(f"🗄️ DB DEBUG: Row {i+1}: {row}")
+
+                return result
             except Exception as e:
-                logger.error(f"Query execution failed: {e}")
+                logger.error(f"Database query error: {e}")
+                logger.error(f"Query: {query}")
+                logger.error(f"Params: {params}")
                 raise
 
     async def execute_command(self, command: str, *args) -> str:
