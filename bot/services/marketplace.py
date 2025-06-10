@@ -134,20 +134,20 @@ class MarketplaceService:
                 # Update user activity score
                 await self.update_user_activity(user_id, 'listing_created')
 
-                # IMMEDIATELY trigger matching system - this is the critical fix
+                # IMMEDIATELY trigger matching system with new order confirmation workflow
                 from bot.services.ordering import OrderingService
                 ordering_service = OrderingService(self.bot)
 
                 logger.info(f"Triggering match search for new listing {listing_id} by user {user_id}")
 
-                # This will find matches and send notifications immediately
+                # This will find matches and initiate order confirmation workflow
                 match_found = await ordering_service.find_and_notify_matches(
                     user_id, guild_id, listing_data['listing_type'], 
                     listing_data['zone'], listing_data['item']
                 )
 
                 if match_found:
-                    logger.info(f"Successfully triggered match notifications for listing {listing_id}")
+                    logger.info(f"Successfully triggered order confirmation workflow for listing {listing_id}")
                 else:
                     logger.info(f"No matches found for listing {listing_id}")
 

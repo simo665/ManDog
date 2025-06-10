@@ -224,8 +224,13 @@ class MarketplaceCommands(commands.Cog):
     async def setup_channel_embed(self, channel: discord.TextChannel, listing_type: str, zone: str):
         """Set up persistent embed and buttons for a marketplace channel."""
         try:
-            # Create embed for the channel with pagination
-            embed = self.embeds.create_marketplace_embed(listing_type, zone, [], 0)
+            # Get existing listings for this zone and type
+            existing_listings = await self.bot.db_manager.get_zone_listings(
+                channel.guild.id, listing_type, zone
+            )
+
+            # Create embed for the channel with existing listings
+            embed = self.embeds.create_marketplace_embed(listing_type, zone, existing_listings, 0)
 
             # Create view with appropriate buttons
             view = MarketplaceView(self.bot, listing_type, zone, 0)
@@ -242,7 +247,7 @@ class MarketplaceCommands(commands.Cog):
                 zone
             )
 
-            logger.info(f"Created persistent message {message.id} in channel {channel.name}")
+            logger.info(f"Created persistent message {message.id} in channel {channel.name} with {len(existing_listings)} existing listings")
 
         except Exception as e:
             logger.error(f"Error setting up channel embed for {channel.name}: {e}")

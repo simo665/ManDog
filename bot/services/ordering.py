@@ -1,653 +1,571 @@
 """
-Ordering system service for managing transactions and queue matching.
+Redesigned ordering system with confirmation workflow and admin moderation.
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
-from datetime import datetime, timezone, timedelta
+import discord
+from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
 import asyncio
-
-from bot.ui.embeds import MarketplaceEmbeds
 
 logger = logging.getLogger(__name__)
 
 class OrderingService:
-    """Service for managing orders, transactions, and queue matching."""
+    """Redesigned ordering service with confirmation and rating workflow."""
 
     def __init__(self, bot):
         self.bot = bot
-        self.embeds = MarketplaceEmbeds()
+        self.pending_confirmations = {}  # Track pending order confirmations
+        self.pending_ratings = {}  # Track pending ratings
 
     async def find_and_notify_matches(self, user_id: int, guild_id: int, listing_type: str, zone: str, item: str) -> bool:
-        """Find matches and immediately notify the user. This is the main entry point."""
+        """Find matching listings and initiate order confirmation process."""
         try:
-            logger.info(f"Starting match search for user {user_id}: {listing_type} {item} in {zone}")
+            # Determine opposite listing type
+            opposite_type = "WTS" if listing_type == "WTB" else "WTB"
 
-            # Find opposite type listings
-            opposite_type = "WTB" if listing_type == "WTS" else "WTS"
-            current_time = datetime.now(timezone.utc)
-
-            # Search for exact item matches first
-            exact_matches = await self.bot.db_manager.execute_query(
+            # Find matching listings
+            matches = await self.bot.db_manager.execute_query(
                 """
-                SELECT l.*, u.username, u.reputation_avg, u.reputation_count
-                FROM listings l
-                LEFT JOIN users u ON l.user_id = u.user_id
-                WHERE l.guild_id = $1 
-                  AND l.listing_type = $2 
-                  AND l.zone = $3 
-                  AND l.item = $4
-                  AND l.expires_at > $5
-                  AND l.active = TRUE
-                  AND l.user_id != $6
-                ORDER BY l.created_at DESC, u.reputation_avg DESC NULLS LAST
+                SELECT id, user_id, item, quantity, notes, subcategory, scheduled_time
+                FROM listings 
+                WHERE guild_id = $1 AND listing_type = $2 AND zone = $3 
+                AND LOWER(item) = LOWER($4) AND active = TRUE AND user_id != $5
+                ORDER BY created_at ASC
                 """,
-                guild_id, opposite_type, zone, item, current_time, user_id
+                guild_id, opposite_type, zone, item, user_id
             )
 
-            # If no exact matches and the item isn't "All Items", look for "All Items" matches
-            all_items_matches = []
-            if not exact_matches and item != "All Items":
-                all_items_matches = await self.bot.db_manager.execute_query(
-                    """
-                    SELECT l.*, u.username, u.reputation_avg, u.reputation_count
-                    FROM listings l
-                    LEFT JOIN users u ON l.user_id = u.user_id
-                    WHERE l.guild_id = $1 
-                      AND l.listing_type = $2 
-                      AND l.zone = $3 
-                      AND l.item = 'All Items'
-                      AND l.expires_at > $4
-                      AND l.active = TRUE
-                      AND l.user_id != $5
-                    ORDER BY l.created_at DESC, u.reputation_avg DESC NULLS LAST
-                    """,
-                    guild_id, opposite_type, zone, current_time, user_id
-                )
-
-            # If this is an "All Items" listing, find specific item matches
-            specific_matches = []
-            if item == "All Items":
-                specific_matches = await self.bot.db_manager.execute_query(
-                    """
-                    SELECT l.*, u.username, u.reputation_avg, u.reputation_count
-                    FROM listings l
-                    LEFT JOIN users u ON l.user_id = u.user_id
-                    WHERE l.guild_id = $1 
-                      AND l.listing_type = $2 
-                      AND l.zone = $3 
-                      AND l.item != 'All Items'
-                      AND l.expires_at > $4
-                      AND l.active = TRUE
-                      AND l.user_id != $5
-                    ORDER BY l.created_at DESC, u.reputation_avg DESC NULLS LAST
-                    """,
-                    guild_id, opposite_type, zone, current_time, user_id
-                )
-
-            # Combine all matches
-            all_matches = exact_matches + all_items_matches + specific_matches
-
-            # Remove duplicates based on listing ID
-            seen_ids = set()
-            unique_matches = []
-            for match in all_matches:
-                if match['id'] not in seen_ids:
-                    unique_matches.append(match)
-                    seen_ids.add(match['id'])
-
-            logger.info(f"Found {len(unique_matches)} total matches for user {user_id}")
-
-            if unique_matches:
-                # Send notification immediately
-                await self.send_match_notification(user_id, unique_matches, listing_type)
-                return True
-            else:
-                logger.info(f"No matches found for user {user_id}")
+            if not matches:
+                logger.info(f"No matches found for {listing_type} {item} in {zone}")
                 return False
 
+            # Get guild and users
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                logger.error(f"Guild {guild_id} not found")
+                return False
+
+            requester = guild.get_member(user_id)
+            if not requester:
+                logger.error(f"User {user_id} not found in guild {guild_id}")
+                return False
+
+            # Process each match
+            matches_found = False
+            for match in matches:
+                matcher_id = match['user_id']
+                matcher = guild.get_member(matcher_id)
+
+                if not matcher:
+                    logger.warning(f"Matcher {matcher_id} not found in guild")
+                    continue
+
+                # Initiate order confirmation
+                await self.initiate_order_confirmation(
+                    guild, requester, matcher, match, listing_type, zone, item
+                )
+                matches_found = True
+
+            return matches_found
+
         except Exception as e:
-            logger.error(f"Error in find_and_notify_matches: {e}")
+            logger.error(f"Error finding matches: {e}")
             return False
 
-    async def send_match_notification(self, user_id: int, matches: List[Dict[str, Any]], listing_type: str):
-        """Send immediate match notification to user."""
+    async def initiate_order_confirmation(self, guild: discord.Guild, requester: discord.Member, 
+                                        matcher: discord.Member, match_data: Dict[str, Any], 
+                                        requester_type: str, zone: str, item: str):
+        """Send order confirmation DMs to both parties."""
         try:
-            user = self.bot.get_user(user_id)
-            if not user:
-                logger.error(f"Could not find user {user_id} to send notification")
-                return
+            # Create unique order ID
+            order_id = f"{guild.id}_{requester.id}_{matcher.id}_{int(datetime.now().timestamp())}"
 
-            # Create notification embed
-            embed = await self.create_match_notification_embed(matches, listing_type)
+            # Determine buyer and seller
+            if requester_type == "WTB":
+                buyer = requester
+                seller = matcher
+                buyer_type = "WTB"
+                seller_type = "WTS"
+            else:
+                buyer = matcher
+                seller = requester
+                buyer_type = "WTS"
+                seller_type = "WTB"
 
-            # Create interaction view
-            from bot.ui.views_ordering import MatchSelectionView
-            view = MatchSelectionView(self.bot, user_id, matches, listing_type)
+            # Store order confirmation data
+            self.pending_confirmations[order_id] = {
+                'guild_id': guild.id,
+                'buyer_id': buyer.id,
+                'seller_id': seller.id,
+                'item': item,
+                'zone': zone,
+                'quantity': match_data.get('quantity', 1),
+                'notes': match_data.get('notes', ''),
+                'listing_id': match_data['id'],
+                'confirmations': set(),
+                'created_at': datetime.now(timezone.utc)
+            }
 
-            # Send DM
+            # Create confirmation embeds and views
+            from bot.ui.views_ordering import OrderConfirmationView
+
+            # Send to buyer
+            buyer_embed = self.create_order_confirmation_embed(
+                "buyer", seller, item, zone, match_data
+            )
+            buyer_view = OrderConfirmationView(self.bot, order_id, "buyer")
+
             try:
-                await user.send(embed=embed, view=view)
-                logger.info(f"Successfully sent match notification to user {user_id}")
+                await buyer.send(embed=buyer_embed, view=buyer_view)
+                logger.info(f"Sent order confirmation to buyer {buyer.display_name}")
             except discord.Forbidden:
-                logger.warning(f"Could not send DM to user {user_id} - DMs disabled")
-            except Exception as e:
-                logger.error(f"Error sending DM to user {user_id}: {e}")
+                logger.warning(f"Cannot DM buyer {buyer.display_name}")
+
+            # Send to seller
+            seller_embed = self.create_order_confirmation_embed(
+                "seller", buyer, item, zone, match_data
+            )
+            seller_view = OrderConfirmationView(self.bot, order_id, "seller")
+
+            try:
+                await seller.send(embed=seller_embed, view=seller_view)
+                logger.info(f"Sent order confirmation to seller {seller.display_name}")
+            except discord.Forbidden:
+                logger.warning(f"Cannot DM seller {seller.display_name}")
 
         except Exception as e:
-            logger.error(f"Error sending match notification: {e}")
+            logger.error(f"Error initiating order confirmation: {e}")
 
-    async def create_match_notification_embed(self, matches: List[Dict[str, Any]], listing_type: str):
-        """Create embed for match notifications."""
-        import discord
-
-        opposite_type = "sellers" if listing_type == "WTS" else "buyers"
-
+    def create_order_confirmation_embed(self, role: str, other_party: discord.Member, 
+                                      item: str, zone: str, match_data: Dict[str, Any]) -> discord.Embed:
+        """Create order confirmation embed."""
         embed = discord.Embed(
-            title="🎯 Matches Found!",
-            description=f"Found {len(matches)} {opposite_type} for your listing!",
-            color=0x00ff00,
+            title="🤝 Trade Match Found!",
+            description=f"A potential trade has been found for **{item}** in {zone.title()}",
+            color=0x00FF00,
             timestamp=datetime.now(timezone.utc)
         )
 
-        # Show top matches
-        for i, match in enumerate(matches[:5]):
-            user_name = match.get('username', f"User {match['user_id']}")
-            reputation = f"⭐ {match['reputation_avg']:.1f} ({match['reputation_count']} ratings)" if match.get('reputation_count', 0) > 0 else "No ratings yet"
+        embed.add_field(
+            name="🎯 Item",
+            value=item,
+            inline=True
+        )
 
+        embed.add_field(
+            name="📍 Zone",
+            value=zone.title(),
+            inline=True
+        )
+
+        embed.add_field(
+            name="📦 Quantity",
+            value=str(match_data.get('quantity', 1)),
+            inline=True
+        )
+
+        if role == "buyer":
             embed.add_field(
-                name=f"{i+1}. {user_name}",
-                value=(
-                    f"**Item:** {match['item']}\n"
-                    f"**Quantity:** {match['quantity']}\n"
-                    f"**Reputation:** {reputation}\n"
-                    f"**Posted:** <t:{int(match['created_at'].timestamp())}:R>"
-                ),
+                name="💰 Seller",
+                value=other_party.mention,
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="🛒 Buyer",
+                value=other_party.mention,
+                inline=False
+            )
+
+        if match_data.get('notes'):
+            embed.add_field(
+                name="📝 Notes",
+                value=match_data['notes'][:500],
+                inline=False
+            )
+
+        embed.add_field(
+            name="⏰ Next Steps",
+            value="Click **Confirm Trade** if you want to proceed with this transaction.",
+            inline=False
+        )
+
+        embed.set_footer(text="Both parties must confirm to proceed")
+        return embed
+
+    async def handle_order_confirmation(self, order_id: str, user_id: int, confirmed: bool):
+        """Handle order confirmation response."""
+        try:
+            if order_id not in self.pending_confirmations:
+                logger.warning(f"Order {order_id} not found in pending confirmations")
+                return False
+
+            order_data = self.pending_confirmations[order_id]
+
+            if confirmed:
+                order_data['confirmations'].add(user_id)
+                logger.info(f"User {user_id} confirmed order {order_id}")
+
+                # Check if both parties confirmed
+                if (order_data['buyer_id'] in order_data['confirmations'] and 
+                    order_data['seller_id'] in order_data['confirmations']):
+
+                    # Both confirmed - proceed to trade completion
+                    await self.complete_order(order_id)
+                    return True
+            else:
+                # Order declined
+                logger.info(f"User {user_id} declined order {order_id}")
+                await self.cancel_order(order_id, "declined")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error handling order confirmation: {e}")
+            return False
+
+    async def complete_order(self, order_id: str):
+        """Complete the order and send rating requests."""
+        try:
+            order_data = self.pending_confirmations.pop(order_id, None)
+            if not order_data:
+                return
+
+            # Get guild and members
+            guild = self.bot.get_guild(order_data['guild_id'])
+            if not guild:
+                return
+
+            buyer = guild.get_member(order_data['buyer_id'])
+            seller = guild.get_member(order_data['seller_id'])
+
+            if not buyer or not seller:
+                logger.error(f"Could not find buyer or seller for order {order_id}")
+                return
+
+            # Remove the matched listing
+            await self.bot.db_manager.remove_listing(order_data['listing_id'], seller.id)
+
+            # Create transaction record
+            await self.bot.db_manager.execute_command(
+                """
+                INSERT INTO transactions (buyer_id, seller_id, item, zone, quantity, status, created_at)
+                VALUES ($1, $2, $3, $4, $5, 'completed', $6)
+                """,
+                buyer.id, seller.id, order_data['item'], order_data['zone'], 
+                order_data['quantity'], datetime.now(timezone.utc)
+            )
+
+            # Send completion messages
+            completion_embed = discord.Embed(
+                title="✅ Trade Confirmed!",
+                description="Both parties have confirmed the trade. Please complete the transaction and then rate each other.",
+                color=0x00FF00,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            completion_embed.add_field(
+                name="🎯 Item",
+                value=order_data['item'],
                 inline=True
             )
 
-        if len(matches) > 5:
-            embed.add_field(
-                name="➕ More matches available",
-                value=f"And {len(matches) - 5} more traders interested!",
-                inline=False
+            completion_embed.add_field(
+                name="📍 Zone", 
+                value=order_data['zone'].title(),
+                inline=True
             )
 
-        embed.add_field(
-            name="💡 Next Steps",
-            value="Use the dropdown below to select a trader and create an order!",
-            inline=False
-        )
-
-        embed.set_footer(text="Orders must be confirmed by both parties within 24 hours")
-
-        return embed
-
-    async def create_order(self, buyer_id: int, seller_id: int, listing_id: int, guild_id: int) -> Optional[int]:
-        """Create a new order between two users."""
-        try:
-            # Get listing details
-            listing = await self.bot.db_manager.execute_query(
-                "SELECT * FROM listings WHERE id = $1 AND active = TRUE",
-                listing_id
-            )
-
-            if not listing:
-                logger.warning(f"Listing {listing_id} not found or inactive")
-                return None
-
-            listing_data = listing[0]
-
-            # Create transaction
-            transaction_id = await self.bot.db_manager.execute_query(
-                """
-                INSERT INTO transactions (listing_id, seller_id, buyer_id, status, created_at)
-                VALUES ($1, $2, $3, 'pending', $4)
-                RETURNING id
-                """,
-                listing_id, seller_id, buyer_id, datetime.now(timezone.utc)
-            )
-
-            if not transaction_id:
-                logger.error("Failed to create transaction")
-                return None
-
-            order_id = transaction_id[0]['id']
-
-            # Send order notifications to both parties
-            await self.send_order_notifications(order_id, buyer_id, seller_id, listing_data)
-
-            logger.info(f"Created order {order_id} between buyer {buyer_id} and seller {seller_id}")
-            return order_id
-
-        except Exception as e:
-            logger.error(f"Error creating order: {e}")
-            return None
-
-    async def send_order_notifications(self, order_id: int, buyer_id: int, seller_id: int, listing_data: Dict[str, Any]):
-        """Send order notifications to both buyer and seller."""
-        try:
-            buyer = self.bot.get_user(buyer_id)
-            seller = self.bot.get_user(seller_id)
-
-            # Create notification embeds
-            buyer_embed = self.create_order_notification_embed(order_id, listing_data, "buyer", seller_id)
-            seller_embed = self.create_order_notification_embed(order_id, listing_data, "seller", buyer_id)
-
-            # Create confirmation views
-            from bot.ui.views_ordering import OrderConfirmationView
-            buyer_view = OrderConfirmationView(self.bot, order_id, "buyer")
-            seller_view = OrderConfirmationView(self.bot, order_id, "seller")
-
-            # Send notifications
-            if buyer:
-                try:
-                    await buyer.send(embed=buyer_embed, view=buyer_view)
-                    logger.info(f"Sent order notification to buyer {buyer_id}")
-                except Exception as e:
-                    logger.error(f"Failed to notify buyer {buyer_id}: {e}")
-
-            if seller:
-                try:
-                    await seller.send(embed=seller_embed, view=seller_view)
-                    logger.info(f"Sent order notification to seller {seller_id}")
-                except Exception as e:
-                    logger.error(f"Failed to notify seller {seller_id}: {e}")
-
-        except Exception as e:
-            logger.error(f"Error sending order notifications: {e}")
-
-    def create_order_notification_embed(self, order_id: int, listing_data: Dict[str, Any], user_type: str, other_user_id: int):
-        """Create order notification embed."""
-        import discord
-
-        other_user = self.bot.get_user(other_user_id)
-        other_username = other_user.display_name if other_user else f"User {other_user_id}"
-
-        if user_type == "buyer":
-            title = "🛒 New Order Created - You're the Buyer"
-            description = f"You have a new order with **{other_username}** for their **{listing_data['listing_type']}** listing."
-        else:
-            title = "💰 New Order Created - You're the Seller"
-            description = f"**{other_username}** wants to order from your **{listing_data['listing_type']}** listing."
-
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=0x3498db,
-            timestamp=datetime.now(timezone.utc)
-        )
-
-        embed.add_field(
-            name="📦 Order Details",
-            value=(
-                f"**Order ID:** #{order_id}\n"
-                f"**Item:** {listing_data['item']}\n"
-                f"**Quantity:** {listing_data['quantity']}\n"
-                f"**Zone:** {listing_data['zone'].title()}"
-            ),
-            inline=True
-        )
-
-        if listing_data.get('notes'):
-            embed.add_field(
-                name="📝 Notes",
-                value=listing_data['notes'][:200] + ("..." if len(listing_data['notes']) > 200 else ""),
-                inline=False
-            )
-
-        embed.add_field(
-            name="⚡ Next Steps",
-            value=(
-                "Both parties need to confirm this order.\n"
-                "Use the buttons below to confirm or cancel."
-            ),
-            inline=False
-        )
-
-        embed.set_footer(text="Orders expire after 24 hours if not confirmed by both parties")
-
-        return embed
-
-    async def confirm_order(self, order_id: int, user_id: int, user_type: str) -> bool:
-        """Confirm an order from buyer or seller side."""
-        try:
-            # Get transaction details
-            transaction = await self.bot.db_manager.execute_query(
-                "SELECT * FROM transactions WHERE id = $1 AND status = 'pending'",
-                order_id
-            )
-
-            if not transaction:
-                logger.warning(f"Transaction {order_id} not found")
-                return False
-
-            transaction_data = transaction[0]
-
-            # Verify user is part of this transaction
-            if user_type == "buyer" and transaction_data['buyer_id'] != user_id:
-                logger.warning(f"User {user_id} is not the buyer for order {order_id}")
-                return False
-            elif user_type == "seller" and transaction_data['seller_id'] != user_id:
-                logger.warning(f"User {user_id} is not the seller for order {order_id}")
-                return False
-
-            # Update confirmation status
-            if user_type == "buyer":
-                await self.bot.db_manager.execute_command(
-                    "UPDATE transactions SET buyer_confirmed = TRUE WHERE id = $1",
-                    order_id
-                )
-            else:
-                await self.bot.db_manager.execute_command(
-                    "UPDATE transactions SET seller_confirmed = TRUE WHERE id = $1",
-                    order_id
-                )
-
-            # Check if both parties confirmed
-            updated_transaction = await self.bot.db_manager.execute_query(
-                "SELECT * FROM transactions WHERE id = $1",
-                order_id
-            )
-
-            if updated_transaction:
-                trans_data = updated_transaction[0]
-                if trans_data.get('buyer_confirmed') and trans_data.get('seller_confirmed'):
-                    # Both confirmed - move to confirmed status
-                    await self.bot.db_manager.execute_command(
-                        "UPDATE transactions SET status = 'confirmed' WHERE id = $1",
-                        order_id
-                    )
-
-                    # Send confirmation notifications
-                    await self.send_both_confirmed_notification(order_id, trans_data)
-
-                    logger.info(f"Order {order_id} confirmed by both parties")
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Error confirming order: {e}")
-            return False
-
-    async def send_both_confirmed_notification(self, order_id: int, transaction_data: Dict[str, Any]):
-        """Send notification when both parties have confirmed."""
-        try:
-            buyer = self.bot.get_user(transaction_data['buyer_id'])
-            seller = self.bot.get_user(transaction_data['seller_id'])
-
-            # Get listing details
-            listing = await self.bot.db_manager.execute_query(
-                "SELECT * FROM listings WHERE id = $1",
-                transaction_data['listing_id']
-            )
-
-            if not listing:
-                return
-
-            listing_data = listing[0]
-
-            # Create confirmed embed
-            embed = self.create_confirmed_embed(order_id, listing_data, transaction_data)
-
-            # Create completion views
+            # Send to both parties with rating buttons
             from bot.ui.views_ordering import OrderCompletionView
-            buyer_view = OrderCompletionView(self.bot, order_id, "buyer")
-            seller_view = OrderCompletionView(self.bot, order_id, "seller")
 
-            # Send to both parties
-            if buyer:
-                try:
-                    await buyer.send(embed=embed, view=buyer_view)
-                    logger.info(f"Sent confirmation to buyer {transaction_data['buyer_id']}")
-                except Exception as e:
-                    logger.error(f"Failed to notify buyer: {e}")
-
-            if seller:
-                try:
-                    await seller.send(embed=embed, view=seller_view)
-                    logger.info(f"Sent confirmation to seller {transaction_data['seller_id']}")
-                except Exception as e:
-                    logger.error(f"Failed to notify seller: {e}")
-
-        except Exception as e:
-            logger.error(f"Error sending both confirmed notification: {e}")
-
-    def create_confirmed_embed(self, order_id: int, listing_data: Dict[str, Any], transaction_data: Dict[str, Any]):
-        """Create embed for confirmed orders."""
-        import discord
-
-        embed = discord.Embed(
-            title="✅ Order Confirmed!",
-            description="Both parties have confirmed this order. You can now proceed with the trade.",
-            color=0x00ff00,
-            timestamp=datetime.now(timezone.utc)
-        )
-
-        buyer = self.bot.get_user(transaction_data['buyer_id'])
-        seller = self.bot.get_user(transaction_data['seller_id'])
-
-        embed.add_field(
-            name="👥 Trade Participants",
-            value=(
-                f"**Buyer:** {buyer.display_name if buyer else 'Unknown'}\n"
-                f"**Seller:** {seller.display_name if seller else 'Unknown'}"
-            ),
-            inline=True
-        )
-
-        embed.add_field(
-            name="📦 Order Details",
-            value=(
-                f"**Order ID:** #{order_id}\n"
-                f"**Item:** {listing_data['item']}\n"
-                f"**Quantity:** {listing_data['quantity']}\n"
-                f"**Zone:** {listing_data['zone'].title()}"
-            ),
-            inline=True
-        )
-
-        embed.add_field(
-            name="🎯 Next Steps",
-            value=(
-                "1. Meet in-game to complete the trade\n"
-                "2. Complete the order using the button below\n"
-                "3. Rate each other after successful trade"
-            ),
-            inline=False
-        )
-
-        embed.set_footer(text="Use the 'Complete Order' button when trade is finished")
-
-        return embed
-
-    async def complete_order(self, order_id: int, user_id: int, user_type: str) -> bool:
-        """Mark order as completed and send rating requests."""
-        try:
-            # Get transaction
-            transaction = await self.bot.db_manager.execute_query(
-                "SELECT * FROM transactions WHERE id = $1 AND status = 'confirmed'",
-                order_id
+            # Send to buyer
+            buyer_completion_embed = completion_embed.copy()
+            buyer_completion_embed.add_field(
+                name="💰 Seller",
+                value=seller.mention,
+                inline=False
             )
+            buyer_view = OrderCompletionView(self.bot, order_id, "buyer", seller.id)
 
-            if not transaction:
-                logger.warning(f"Transaction {order_id} not found or not confirmed")
-                return False
+            try:
+                await buyer.send(embed=buyer_completion_embed, view=buyer_view)
+            except discord.Forbidden:
+                pass
 
-            transaction_data = transaction[0]
-
-            # Verify user is part of this transaction
-            if user_type == "buyer" and transaction_data['buyer_id'] != user_id:
-                return False
-            elif user_type == "seller" and transaction_data['seller_id'] != user_id:
-                return False
-
-            # Mark as completed
-            await self.bot.db_manager.execute_command(
-                """
-                UPDATE transactions 
-                SET status = 'completed', completed_at = $1 
-                WHERE id = $2
-                """,
-                datetime.now(timezone.utc), order_id
+            # Send to seller
+            seller_completion_embed = completion_embed.copy()
+            seller_completion_embed.add_field(
+                name="🛒 Buyer",
+                value=buyer.mention,
+                inline=False
             )
+            seller_view = OrderCompletionView(self.bot, order_id, "seller", buyer.id)
 
-            # Mark listing as inactive
-            await self.bot.db_manager.execute_command(
-                "UPDATE listings SET active = FALSE WHERE id = $1",
-                transaction_data['listing_id']
-            )
+            try:
+                await seller.send(embed=seller_completion_embed, view=seller_view)
+            except discord.Forbidden:
+                pass
 
-            # Send rating requests immediately
-            await self.send_rating_requests(order_id, transaction_data)
+            # Store for rating tracking
+            self.pending_ratings[order_id] = {
+                'buyer_id': buyer.id,
+                'seller_id': seller.id,
+                'guild_id': guild.id,
+                'item': order_data['item'],
+                'zone': order_data['zone'],
+                'ratings': {}
+            }
 
-            # Refresh marketplace embeds
-            listing = await self.bot.db_manager.execute_query(
-                "SELECT guild_id, listing_type, zone FROM listings WHERE id = $1",
-                transaction_data['listing_id']
-            )
-
-            if listing:
-                listing_data = listing[0]
-                from bot.services.marketplace import MarketplaceService
-                marketplace_service = MarketplaceService(self.bot)
-                await marketplace_service.refresh_marketplace_embeds_for_zone(
-                    listing_data['guild_id'], 
-                    listing_data['listing_type'], 
-                    listing_data['zone']
-                )
-
-            logger.info(f"Order {order_id} completed successfully")
-            return True
+            logger.info(f"Order {order_id} completed, rating phase initiated")
 
         except Exception as e:
             logger.error(f"Error completing order: {e}")
-            return False
 
-    async def send_rating_requests(self, order_id: int, transaction_data: Dict[str, Any]):
-        """Send rating requests to both parties immediately."""
-        try:
-            buyer = self.bot.get_user(transaction_data['buyer_id'])
-            seller = self.bot.get_user(transaction_data['seller_id'])
-
-            # Create rating embeds
-            buyer_embed = self.create_rating_request_embed(order_id, "seller", transaction_data['seller_id'])
-            seller_embed = self.create_rating_request_embed(order_id, "buyer", transaction_data['buyer_id'])
-
-            # Create rating views
-            from bot.ui.views_ordering import RatingView
-            buyer_view = RatingView(self.bot, order_id, transaction_data['seller_id'])
-            seller_view = RatingView(self.bot, order_id, transaction_data['buyer_id'])
-
-            # Send rating requests
-            if buyer:
-                try:
-                    await buyer.send(embed=buyer_embed, view=buyer_view)
-                    logger.info(f"Sent rating request to buyer {transaction_data['buyer_id']}")
-                except Exception as e:
-                    logger.error(f"Failed to send rating request to buyer: {e}")
-
-            if seller:
-                try:
-                    await seller.send(embed=seller_embed, view=seller_view)
-                    logger.info(f"Sent rating request to seller {transaction_data['seller_id']}")
-                except Exception as e:
-                    logger.error(f"Failed to send rating request to seller: {e}")
-
-        except Exception as e:
-            logger.error(f"Error sending rating requests: {e}")
-
-    def create_rating_request_embed(self, order_id: int, target_type: str, target_user_id: int):
-        """Create rating request embed."""
-        import discord
-
-        target_user = self.bot.get_user(target_user_id)
-        target_name = target_user.display_name if target_user else f"User {target_user_id}"
-
-        embed = discord.Embed(
-            title="⭐ Rate Your Trading Partner",
-            description=f"Please rate your experience trading with **{target_name}**.",
-            color=0xffd700,
-            timestamp=datetime.now(timezone.utc)
-        )
-
-        embed.add_field(
-            name="📊 Rating Scale",
-            value=(
-                "⭐ **1 Star** - Poor experience\n"
-                "⭐⭐ **2 Stars** - Below average\n"
-                "⭐⭐⭐ **3 Stars** - Average\n"
-                "⭐⭐⭐⭐ **4 Stars** - Good\n"
-                "⭐⭐⭐⭐⭐ **5 Stars** - Excellent"
-            ),
-            inline=False
-        )
-
-        embed.add_field(
-            name="💭 Optional Comment",
-            value="You can add a comment to help other traders know about your experience.",
-            inline=False
-        )
-
-        embed.set_footer(text=f"Order #{order_id} • Rating helps build trust in the community")
-
-        return embed
-
-    async def cancel_order(self, order_id: int, user_id: int, reason: str = "") -> bool:
+    async def cancel_order(self, order_id: str, reason: str):
         """Cancel an order."""
         try:
-            # Get transaction
-            transaction = await self.bot.db_manager.execute_query(
-                "SELECT * FROM transactions WHERE id = $1 AND status IN ('pending', 'confirmed')",
-                order_id
+            order_data = self.pending_confirmations.pop(order_id, None)
+            if not order_data:
+                return
+
+            guild = self.bot.get_guild(order_data['guild_id'])
+            if not guild:
+                return
+
+            buyer = guild.get_member(order_data['buyer_id'])
+            seller = guild.get_member(order_data['seller_id'])
+
+            cancel_embed = discord.Embed(
+                title="❌ Trade Cancelled",
+                description=f"The trade for **{order_data['item']}** has been cancelled ({reason}).",
+                color=0xFF0000,
+                timestamp=datetime.now(timezone.utc)
             )
 
-            if not transaction:
-                return False
+            # Notify both parties
+            for member in [buyer, seller]:
+                if member:
+                    try:
+                        await member.send(embed=cancel_embed)
+                    except discord.Forbidden:
+                        pass
 
-            transaction_data = transaction[0]
-
-            # Verify user is part of this transaction
-            if user_id not in [transaction_data['buyer_id'], transaction_data['seller_id']]:
-                return False
-
-            # Cancel transaction
-            await self.bot.db_manager.execute_command(
-                "UPDATE transactions SET status = 'cancelled' WHERE id = $1",
-                order_id
-            )
-
-            logger.info(f"Order {order_id} cancelled by user {user_id}")
-            return True
+            logger.info(f"Order {order_id} cancelled: {reason}")
 
         except Exception as e:
             logger.error(f"Error cancelling order: {e}")
+
+    async def handle_rating_submission(self, order_id: str, rater_id: int, rated_id: int, rating: int, comment: str = ""):
+        """Handle rating submission with admin moderation for low ratings."""
+        try:
+            if order_id not in self.pending_ratings:
+                logger.warning(f"Rating order {order_id} not found")
+                return False
+
+            rating_data = self.pending_ratings[order_id]
+
+            # Store the rating
+            rating_data['ratings'][rater_id] = {
+                'rated_id': rated_id,
+                'rating': rating,
+                'comment': comment,
+                'timestamp': datetime.now(timezone.utc)
+            }
+
+            # Check if rating needs admin approval (rating < 3)
+            if rating < 3:
+                await self.create_admin_moderation_ticket(order_id, rater_id, rated_id, rating, comment)
+                return True
+
+            # Good rating - process immediately
+            await self.process_rating(rater_id, rated_id, rating, comment, rating_data['guild_id'])
+
+            # Check if both ratings are complete
+            if len(rating_data['ratings']) == 2:
+                # Both ratings submitted, clean up
+                self.pending_ratings.pop(order_id, None)
+                logger.info(f"All ratings completed for order {order_id}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling rating submission: {e}")
             return False
 
-    async def get_user_order_history(self, user_id: int, guild_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get user's order history."""
+    async def create_admin_moderation_ticket(self, order_id: str, rater_id: int, rated_id: int, rating: int, comment: str):
+        """Create admin moderation ticket for low ratings."""
         try:
-            orders = await self.bot.db_manager.execute_query(
-                """
-                SELECT t.*, l.item, l.zone, l.listing_type,
-                       CASE 
-                         WHEN t.buyer_id = $1 THEN u_seller.username
-                         ELSE u_buyer.username
-                       END as other_party_name
-                FROM transactions t
-                JOIN listings l ON t.listing_id = l.id
-                LEFT JOIN users u_seller ON t.seller_id = u_seller.user_id
-                LEFT JOIN users u_buyer ON t.buyer_id = u_buyer.user_id
-                WHERE (t.buyer_id = $1 OR t.seller_id = $1)
-                  AND l.guild_id = $2
-                ORDER BY t.created_at DESC
-                LIMIT $3
-                """,
-                user_id, guild_id, limit
+            rating_data = self.pending_ratings[order_id]
+            guild = self.bot.get_guild(rating_data['guild_id'])
+            if not guild:
+                return
+
+            # Find or create moderation category
+            moderation_category = None
+            for category in guild.categories:
+                if category.name.lower() == "moderation tickets":
+                    moderation_category = category
+                    break
+
+            if not moderation_category:
+                moderation_category = await guild.create_category(
+                    "Moderation Tickets",
+                    reason="Created for rating moderation"
+                )
+
+            # Create private channel
+            rater = guild.get_member(rater_id)
+            rated = guild.get_member(rated_id)
+
+            channel_name = f"rating-{rater.display_name}-{rated.display_name}"[:50]
+
+            # Create channel with restricted permissions
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                rater: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                rated: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            }
+
+            # Add admin roles
+            admin_roles = await self.get_admin_roles(guild)
+            for role in admin_roles:
+                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            ticket_channel = await guild.create_text_channel(
+                channel_name,
+                category=moderation_category,
+                overwrites=overwrites,
+                reason=f"Rating moderation for order {order_id}"
             )
-            
-            return orders
-            
+
+            # Send moderation embed
+            from bot.ui.views_ordering import RatingModerationView
+
+            moderation_embed = discord.Embed(
+                title="⚠️ Rating Requires Moderation",
+                description="A low rating has been submitted and requires admin approval.",
+                color=0xFFA500,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            moderation_embed.add_field(name="🎯 Item", value=rating_data['item'], inline=True)
+            moderation_embed.add_field(name="📍 Zone", value=rating_data['zone'], inline=True)
+            moderation_embed.add_field(name="⭐ Rating", value=f"{rating}/5", inline=True)
+            moderation_embed.add_field(name="👤 Rater", value=rater.mention, inline=True)
+            moderation_embed.add_field(name="👥 Rated User", value=rated.mention, inline=True)
+            moderation_embed.add_field(name="📝 Comment", value=comment or "No comment provided", inline=False)
+
+            view = RatingModerationView(self.bot, order_id, rater_id, rated_id, rating, comment)
+
+            await ticket_channel.send(
+                content=f"@here New rating moderation required",
+                embed=moderation_embed,
+                view=view
+            )
+
+            logger.info(f"Created moderation ticket {ticket_channel.name} for order {order_id}")
+
         except Exception as e:
-            logger.error(f"Error getting user order history: {e}")
-            return []
+            logger.error(f"Error creating admin moderation ticket: {e}")
+
+    async def get_admin_roles(self, guild: discord.Guild) -> List[discord.Role]:
+        """Get admin roles for the guild."""
+        admin_roles = []
+        admin_role_names = ["admin", "administrator", "mandok admin", "marketplace admin", "mod", "moderator"]
+
+        for role in guild.roles:
+            if (role.permissions.administrator or 
+                role.name.lower() in admin_role_names):
+                admin_roles.append(role)
+
+        return admin_roles
+
+    async def handle_admin_rating_decision(self, order_id: str, rater_id: int, rated_id: int, 
+                                         rating: int, comment: str, approved: bool, admin_id: int):
+        """Handle admin decision on rating moderation."""
+        try:
+            if approved:
+                # Process the rating
+                rating_data = self.pending_ratings.get(order_id)
+                if rating_data:
+                    await self.process_rating(rater_id, rated_id, rating, comment, rating_data['guild_id'])
+                    logger.info(f"Admin {admin_id} approved rating for order {order_id}")
+
+                    # Check if both ratings are complete
+                    if len(rating_data['ratings']) == 2:
+                        self.pending_ratings.pop(order_id, None)
+            else:
+                # Remove the rating from pending
+                if order_id in self.pending_ratings:
+                    rating_data = self.pending_ratings[order_id]
+                    rating_data['ratings'].pop(rater_id, None)
+                    logger.info(f"Admin {admin_id} rejected rating for order {order_id}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error handling admin rating decision: {e}")
+            return False
+
+    async def process_rating(self, rater_id: int, rated_id: int, rating: int, comment: str, guild_id: int):
+        """Process and store a rating in the database."""
+        try:
+            # Store rating in database
+            await self.bot.db_manager.execute_command(
+                """
+                INSERT INTO ratings (rater_id, rated_id, guild_id, rating, comment, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                """,
+                rater_id, rated_id, guild_id, rating, comment, datetime.now(timezone.utc)
+            )
+
+            # Update user reputation
+            await self.update_user_reputation(rated_id)
+
+            logger.info(f"Processed rating: {rater_id} rated {rated_id} with {rating}/5")
+
+        except Exception as e:
+            logger.error(f"Error processing rating: {e}")
+
+    async def update_user_reputation(self, user_id: int):
+        """Update user reputation based on ratings."""
+        try:
+            # Calculate new reputation
+            reputation_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT 
+                    COUNT(*) as total_ratings,
+                    AVG(rating) as average_rating,
+                    SUM(CASE WHEN rating >= 4 THEN 1 ELSE 0 END) as positive_ratings
+                FROM ratings 
+                WHERE rated_id = $1
+                """,
+                user_id
+            )
+
+            if reputation_data:
+                data = reputation_data[0]
+                avg_rating = float(data['average_rating']) if data['average_rating'] else 0
+                total_ratings = data['total_ratings']
+                positive_ratings = data['positive_ratings']
+
+                # Update user reputation
+                await self.bot.db_manager.execute_command(
+                    """
+                    INSERT INTO users (user_id, average_rating, total_ratings, positive_ratings, updated_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET 
+                        average_rating = $2,
+                        total_ratings = $3,
+                        positive_ratings = $4,
+                        updated_at = $5
+                    """,
+                    user_id, avg_rating, total_ratings, positive_ratings, datetime.now(timezone.utc)
+                )
+
+                logger.info(f"Updated reputation for user {user_id}: {avg_rating:.2f}/5 ({total_ratings} ratings)")
+
+        except Exception as e:
+            logger.error(f"Error updating user reputation: {e}")

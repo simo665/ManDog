@@ -68,53 +68,71 @@ class MandokBot(commands.Bot):
     async def load_persistent_views(self):
         """Load persistent views for marketplace channels."""
         try:
-            from bot.ui.views import MarketplaceView
+            # Clear any existing persistent views to prevent duplication
+            self._view_store.clear()
 
-            # Clear any existing persistent views to prevent duplicates
-            self.persistent_views.clear()
+            # Get all marketplace channels with messages
+            channels = await self.db_manager.execute_query(
+                "SELECT guild_id, channel_id, listing_type, zone, message_id FROM marketplace_channels WHERE message_id IS NOT NULL"
+            )
 
-            # Get all unique marketplace channel configurations from database
-            marketplace_channels = await self.db_manager.execute_query("""
-                SELECT DISTINCT channel_id, listing_type, zone FROM marketplace_channels
-                WHERE zone IS NOT NULL AND zone != 'unknown'
-                ORDER BY channel_id
-            """)
+            view_count = 0
+            processed_channels = set()  # Track processed channels to avoid duplicates
 
-            loaded_views = 0
-            unique_configs = set()
-            
-            for channel_data in marketplace_channels:
+            for channel_data in channels:
+                guild_id = channel_data['guild_id']
                 channel_id = channel_data['channel_id']
                 listing_type = channel_data['listing_type']
                 zone = channel_data['zone']
+                message_id = channel_data['message_id']
 
-                # Create unique identifier for this configuration
-                config_key = f"{listing_type}_{zone}"
-                
-                # Skip if we've already loaded a view for this configuration
-                if config_key in unique_configs:
-                    logger.debug(f"Skipping duplicate configuration for {listing_type} in {zone}")
+                # Skip invalid zones
+                if not zone or zone == "unknown":
                     continue
 
-                # Verify channel still exists
-                channel = self.get_channel(channel_id)
-                if not channel:
-                    logger.warning(f"Channel {channel_id} not found, skipping view creation")
+                # Create unique identifier for this channel
+                channel_key = f"{guild_id}_{channel_id}_{listing_type}_{zone}"
+
+                # Skip if already processed
+                if channel_key in processed_channels:
+                    logger.warning(f"Skipping duplicate channel: {channel_key}")
                     continue
 
+                processed_channels.add(channel_key)
+
+                # Verify the channel and message still exist
                 try:
+                    guild = self.get_guild(guild_id)
+                    if not guild:
+                        continue
+
+                    channel = guild.get_channel(channel_id)
+                    if not channel:
+                        continue
+
+                    # Try to fetch the message to verify it exists
+                    if message_id:
+                        try:
+                            await channel.fetch_message(message_id)
+                        except discord.NotFound:
+                            # Message doesn't exist, skip this view
+                            logger.warning(f"Message {message_id} not found in channel {channel_id}")
+                            continue
+
+                    # Create and add persistent view
+                    from bot.ui.views import MarketplaceView
                     view = MarketplaceView(self, listing_type, zone, 0)
                     self.add_view(view)
-                    unique_configs.add(config_key)
-                    loaded_views += 1
-                    logger.debug(f"Loaded persistent view for {listing_type} in {zone}")
-                except Exception as e:
-                    logger.error(f"Failed to load view for channel {channel_id}: {e}")
+                    view_count += 1
 
-            logger.info(f"Loaded {loaded_views} unique persistent marketplace views")
+                except Exception as channel_error:
+                    logger.warning(f"Error verifying channel {channel_id}: {channel_error}")
+                    continue
+
+            logger.info(f"Loaded {view_count} unique persistent marketplace views")
 
         except Exception as e:
-            logger.error(f"Error loading persistent views: {e}")
+            logger.error(f"Error setting up persistent views: {e}")
 
     async def on_guild_join(self, guild: discord.Guild):
         """Called when the bot joins a new guild."""
