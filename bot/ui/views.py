@@ -1,22 +1,10 @@
-python
-"""
-Discord UI Views for the marketplace bot.
-"""
-
-import discord
-from discord.ext import commands
-import logging
-from typing import List, Dict, Any
 from datetime import datetime, timezone
-
 from config.ffxi_data import ZONE_DATA
-
 # Import ordering views
 from bot.ui.views_ordering import (
     OrderConfirmationView, OrderCompletionView, RatingView, 
     MatchSelectionView, QueueNotificationView
 )
-
 import discord
 from discord.ext import commands
 from typing import Optional, List, Dict, Any
