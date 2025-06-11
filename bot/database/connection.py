@@ -536,28 +536,60 @@ class DatabaseManager:
             logger.error(f"Error ensuring user exists: {e}")
             raise
 
-    async def cleanup_guild_data(self, guild_id: int):
-        """Clean up data for a guild that the bot left."""
+    async def add_to_queue(self, listing_id: int, user_id: int, item_name: str) -> bool:
+        """Add a user to the queue for a specific item."""
         try:
-            # Deactivate all listings for the guild
             await self.execute_command(
-                "UPDATE listings SET active = FALSE WHERE guild_id = $1",
-                guild_id
+                """
+                INSERT INTO listing_queues (listing_id, user_id, item_name, created_at)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (listing_id, user_id, item_name) DO NOTHING
+                """,
+                listing_id, user_id, item_name, datetime.now(timezone.utc)
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error adding to queue: {e}")
+            return False
+
+    async def get_listing_queues(self, listing_id: int) -> Dict[str, List[int]]:
+        """Get all queued items and buyers for a listing."""
+        try:
+            results = await self.execute_query(
+                """
+                SELECT item_name, user_id 
+                FROM listing_queues 
+                WHERE listing_id = $1
+                ORDER BY item_name, created_at ASC
+                """,
+                listing_id
             )
 
-            # Remove guild config
+            queues = {}
+            for row in results:
+                item_name = row['item_name']
+                user_id = row['user_id']
+
+                if item_name not in queues:
+                    queues[item_name] = []
+                queues[item_name].append(user_id)
+
+            return queues
+        except Exception as e:
+            logger.error(f"Error getting listing queues: {e}")
+            return {}
+
+    async def cleanup_guild_data(self, guild_id: int):
+        """Clean up all data for a guild."""
+        try:
             await self.execute_command(
-                "DELETE FROM guild_configs WHERE guild_id = $1",
+                "DELETE FROM listings WHERE guild_id = $1",
                 guild_id
             )
-
-            # Remove marketplace channels
             await self.execute_command(
-                "DELETE FROM marketplace_channels WHERE guild_id = $1",
+                "DELETE FROM marketplace_channels WHERE guild_id = $1", 
                 guild_id
             )
-
             logger.info(f"Cleaned up data for guild {guild_id}")
-
         except Exception as e:
             logger.error(f"Error cleaning up guild data: {e}")

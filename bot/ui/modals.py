@@ -333,41 +333,61 @@ class QuantityNotesModal(discord.ui.Modal):
             self.listing_data['quantity'] = quantity
             self.listing_data['notes'] = self.notes_input.value
 
-            # If WTS and item is "All Items", show queue modal
-            if self.listing_data['listing_type'].upper() == "WTS" and self.listing_data['item'].upper() == "ALL ITEMS":
-                modal = ItemQueueModal(self.bot, self.listing_data)
-                await interaction.response.send_modal(modal)
-            else:
-                # Show date/time selection view
-                view = DateTimeSelectView(self.bot, self.listing_data)
-
-                embed = discord.Embed(
-                    title="📅 Schedule Your Listing",
-                    description=f"When would you like to be available for **{self.listing_data['item']}**?",
-                    color=0x3B82F6,
-                    timestamp=datetime.now(timezone.utc)
+            # WTB listings don't need scheduling - create immediately
+            if self.listing_data['listing_type'].upper() == "WTB":
+                from bot.services.marketplace import MarketplaceService
+                marketplace_service = MarketplaceService(self.bot)
+                listing_id = await marketplace_service.create_listing(
+                    user_id=interaction.user.id,
+                    guild_id=interaction.guild.id,
+                    listing_data={
+                        **self.listing_data,
+                        'scheduled_time': datetime.now(timezone.utc)
+                    }
                 )
 
-                embed.add_field(
-                    name="🎯 Item",
-                    value=self.listing_data['item'],
-                    inline=True
-                )
-
-                embed.add_field(
-                    name="📦 Quantity", 
-                    value=str(quantity),
-                    inline=True
-                )
-
-                if self.listing_data['notes']:
-                    embed.add_field(
-                        name="📝 Notes",
-                        value=self.listing_data['notes'][:200],
-                        inline=False
+                if listing_id:
+                    await interaction.response.send_message(
+                        f"✅ Your WTB listing for **{self.listing_data['item']}** has been created!",
+                        ephemeral=True
                     )
+                else:
+                    await interaction.response.send_message(
+                        "❌ Failed to create listing",
+                        ephemeral=True
+                    )
+                return
 
-                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            # WTS listings need scheduling
+            view = DateTimeSelectView(self.bot, self.listing_data)
+
+            embed = discord.Embed(
+                title="📅 Schedule Your Listing",
+                description=f"When would you like to be available for **{self.listing_data['item']}**?",
+                color=0x3B82F6,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(
+                name="🎯 Item",
+                value=self.listing_data['item'],
+                inline=True
+            )
+
+            embed.add_field(
+                name="📦 Quantity", 
+                value=str(quantity),
+                inline=True
+            )
+
+            if self.listing_data['notes']:
+                embed.add_field(
+                    name="📝 Notes",
+                    value=self.listing_data['notes'][:200],
+                    inline=False
+                )
+
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         except Exception as e:
             logger.error(f"Error in quantity/notes modal submission: {e}")
@@ -528,6 +548,104 @@ class CustomTimeModal(discord.ui.Modal):
             logger.error(f"Error in custom time modal: {e}")
             await interaction.response.send_message(
                 "❌ An error occurred while creating the listing",
+                ephemeral=True
+            )
+
+class QueueModal(discord.ui.Modal):
+    """Modal for joining a queue for All Items WTS listings."""
+
+    def __init__(self, bot, all_items_listings: List[Dict[str, Any]], zone: str):
+        super().__init__(title="Join Queue for Item")
+        self.bot = bot
+        self.all_items_listings = all_items_listings
+        self.zone = zone
+
+        self.item_input = discord.ui.TextInput(
+            label="Item Name",
+            placeholder="Enter the specific item you want to queue for",
+            max_length=200,
+            required=True,
+            style=discord.TextStyle.short
+        )
+
+        self.listing_select = discord.ui.TextInput(
+            label="Seller (Optional)",
+            placeholder="Leave blank to queue for any seller, or enter seller name",
+            max_length=100,
+            required=False,
+            style=discord.TextStyle.short
+        )
+
+        self.add_item(self.item_input)
+        self.add_item(self.listing_select)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle queue submission."""
+        try:
+            item_name = self.item_input.value.strip()
+            preferred_seller = self.listing_select.value.strip() if self.listing_select.value else None
+
+            if not item_name:
+                await interaction.response.send_message(
+                    "❌ Please enter an item name.",
+                    ephemeral=True
+                )
+                return
+
+            # Find target listing
+            target_listing = None
+            if preferred_seller:
+                # Try to find listing by preferred seller
+                for listing in self.all_items_listings:
+                    seller = interaction.guild.get_member(listing['user_id'])
+                    if seller and (preferred_seller.lower() in seller.display_name.lower() or 
+                                 preferred_seller.lower() in seller.name.lower()):
+                        target_listing = listing
+                        break
+            
+            # If no preferred seller or not found, use first available
+            if not target_listing and self.all_items_listings:
+                target_listing = self.all_items_listings[0]
+
+            if not target_listing:
+                await interaction.response.send_message(
+                    "❌ No suitable All Items listings found.",
+                    ephemeral=True
+                )
+                return
+
+            # Add to queue
+            success = await self.bot.db_manager.add_to_queue(
+                listing_id=target_listing['id'],
+                user_id=interaction.user.id,
+                item_name=item_name
+            )
+
+            if success:
+                seller = interaction.guild.get_member(target_listing['user_id'])
+                seller_name = seller.display_name if seller else "Unknown"
+                
+                await interaction.response.send_message(
+                    f"✅ You've been added to the queue for **{item_name}** from {seller_name}'s All Items listing!",
+                    ephemeral=True
+                )
+                
+                # Refresh the marketplace embed
+                from bot.services.marketplace import MarketplaceService
+                marketplace_service = MarketplaceService(self.bot)
+                await marketplace_service.refresh_marketplace_embeds_for_zone(
+                    interaction.guild.id, "WTS", self.zone
+                )
+            else:
+                await interaction.response.send_message(
+                    "❌ Could not add you to the queue. You may already be queued for this item.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error in queue modal submission: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while joining the queue.",
                 ephemeral=True
             )
 

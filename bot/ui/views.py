@@ -297,23 +297,6 @@ class MarketplaceView(discord.ui.View):
             except:
                 pass
 
-    @discord.ui.button(label="📝 Create Listing", style=discord.ButtonStyle.green, emoji="📝")
-    async def create_listing(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle create listing button."""
-        try:
-            # Import here to avoid circular imports
-            from bot.ui.modals import ListingModal
-
-            modal = ListingModal(self.bot, self.listing_type, self.zone)
-            await interaction.response.send_modal(modal)
-
-        except Exception as e:
-            logger.error(f"Error opening listing modal: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while opening the listing form.",
-                ephemeral=True
-            )
-
     @discord.ui.button(label="🔥 Join Queue", style=discord.ButtonStyle.secondary, emoji="🔥", row=1)
     async def join_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle join queue button for WTS All Items listings."""

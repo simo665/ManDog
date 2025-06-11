@@ -1,6 +1,4 @@
-"""
-Database migration utilities.
-"""
+"""Database migration utilities."""
 
 import logging
 from typing import List
@@ -151,6 +149,64 @@ class MigrationManager:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
             )
         """)
+
+async def create_reputation_tables(db_manager):
+    """Create reputation system tables."""
+    try:
+        # User reputation ratings
+        await db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS user_ratings (
+                id SERIAL PRIMARY KEY,
+                rater_id BIGINT NOT NULL,
+                target_id BIGINT NOT NULL,
+                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
+                rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(rater_id, target_id, listing_id)
+            )
+        """)
+
+        # User reputation summary
+        await db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS user_reputation (
+                user_id BIGINT PRIMARY KEY,
+                average_rating DECIMAL(3,2) DEFAULT 0.00,
+                total_ratings INTEGER DEFAULT 0,
+                activity_score INTEGER DEFAULT 0,
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+        logger.info("Reputation tables created successfully")
+    except Exception as e:
+        logger.error(f"Error creating reputation tables: {e}")
+        raise
+
+async def create_listing_queues_table(db_manager):
+    """Create listing queues table for All Items WTS listings."""
+    try:
+        await db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS listing_queues (
+                id SERIAL PRIMARY KEY,
+                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL,
+                item_name VARCHAR(200) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(listing_id, user_id, item_name)
+            )
+        """)
+
+        # Create index for faster lookups
+        await db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_listing_queues_listing_id 
+            ON listing_queues(listing_id)
+        """)
+
+        logger.info("Listing queues table created successfully")
+    except Exception as e:
+        logger.error(f"Error creating listing queues table: {e}")
+        raise
 
 async def run_migrations(db_manager):
     """Run database migrations."""
