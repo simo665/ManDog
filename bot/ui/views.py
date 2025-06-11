@@ -67,6 +67,13 @@ class MarketplaceView(discord.ui.View):
         # Customize button labels based on type
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
+        
+        # Add queue button for WTS embeds only
+        if listing_type.upper() == "WTS":
+            self.join_queue_button.custom_id = f"marketplace_queue_{listing_type}_{zone}"
+        else:
+            # Remove queue button for WTB embeds
+            self.remove_item(self.join_queue_button)
 
     @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary, row=0)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -298,7 +305,7 @@ class MarketplaceView(discord.ui.View):
                 pass
 
     @discord.ui.button(label="🔥 Join Queue", style=discord.ButtonStyle.secondary, emoji="🔥", row=1)
-    async def join_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def join_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle join queue button for WTS All Items listings."""
         try:
             # Only show queue button for WTS listings
