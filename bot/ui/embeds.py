@@ -142,43 +142,51 @@ class MarketplaceEmbeds:
 
             # Add fields for each subcategory
             for subcat, subcat_listings in grouped.items():
-                listing_text = []
+                all_listings_text = []
+                
                 for listing in subcat_listings:
                     # Format listing with user info
                     user_mention = f"<@{listing['user_id']}>"
                     time_str = listing.get('scheduled_time').strftime("%B %d – %I%p").replace(" 0", " ").replace("AM", "AM").replace("PM", "PM") if listing.get('scheduled_time') else "Unknown"
 
-                    # Build listing text
-                    listing_text = f"🧾 **{listing_type}** by {user_mention}\n"
-                    listing_text += f"⏰ **Time:** {time_str}\n"
+                    # Build individual listing text
+                    individual_listing = []
+                    individual_listing.append(f"🧾 **{listing_type}** by {user_mention}")
+                    individual_listing.append(f"⏰ **Time:** {time_str}")
 
                     # Handle items and queues
                     if listing['item'].lower() == "all items" and listing.get('queued_items'):
-                        listing_text += f"📦 **Items:**\n"
+                        individual_listing.append("📦 **Items:**")
                         for item_name, user_ids in listing['queued_items'].items():
                             user_mentions = [f"<@{uid}>" for uid in user_ids]
-                            listing_text += f"• {item_name}"
+                            item_line = f"• {item_name}"
                             if listing['quantity'] > 1:
-                                listing_text += f" ×{listing['quantity']}"
-                            listing_text += f" – Queued: {', '.join(user_mentions)}\n"
+                                item_line += f" ×{listing['quantity']}"
+                            item_line += f" – Queued: {', '.join(user_mentions)}"
+                            individual_listing.append(item_line)
                     else:
-                        listing_text += f"📦 **Item:** {listing['item']}"
+                        item_line = f"📦 **Item:** {listing['item']}"
                         if listing['quantity'] > 1:
-                            listing_text += f" ×{listing['quantity']}"
+                            item_line += f" ×{listing['quantity']}"
+                        individual_listing.append(item_line)
 
                     if listing.get('notes'):
-                        listing_text += f"\n📝 **Notes:** {listing['notes']}"
+                        individual_listing.append(f"📝 **Notes:** {listing['notes']}")
 
                     # Add reputation if available
                     if listing.get('reputation_avg') and float(listing['reputation_avg']) > 0:
                         rep_stars = "⭐" * min(5, int(float(listing['reputation_avg'])))
-                        listing_text += f"\n{rep_stars} {float(listing['reputation_avg']):.1f}"
+                        individual_listing.append(f"{rep_stars} {float(listing['reputation_avg']):.1f}")
 
-                    embed.add_field(
-                        name=f"📂 {subcat} ({len(subcat_listings)} items)",
-                        value="\n".join(listing_text) if listing_text else "No listings",
-                        inline=False
-                    )
+                    # Join this listing's lines and add to all listings
+                    all_listings_text.append("\n".join(individual_listing))
+
+                # Create the field with all listings for this subcategory
+                embed.add_field(
+                    name=f"📂 {subcat} ({len(subcat_listings)} {'item' if len(subcat_listings) == 1 else 'items'})",
+                    value="\n\n".join(all_listings_text) if all_listings_text else "No listings",
+                    inline=False
+                )
 
         footer_text = f"Use the buttons below to manage your {listing_type} listings"
         if total_pages > 1:

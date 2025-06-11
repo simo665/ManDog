@@ -77,6 +77,7 @@ class MigrationManager:
             4: self.update_transactions_schema,
             5: self.add_ratings_table,
             6: self.add_guild_rating_configs,
+            7: self.add_listing_queues_table,
         }
 
     async def migration_001_initial_schema(self):
@@ -149,6 +150,26 @@ class MigrationManager:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
             )
         """)
+
+    async def add_listing_queues_table(self):
+        """Add listing queues table for WTS All Items queue functionality."""
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS listing_queues (
+                id SERIAL PRIMARY KEY,
+                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL,
+                item_name VARCHAR(200) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(listing_id, user_id, item_name)
+            )
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_listing_queues_listing_id
+            ON listing_queues(listing_id)
+        """)
+        
+        logger.info("Listing queues table and index created successfully")
 
 async def create_reputation_tables(db_manager):
     """Create reputation system tables."""

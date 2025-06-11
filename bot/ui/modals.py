@@ -555,7 +555,7 @@ class CustomTimeModal(discord.ui.Modal):
 class QueueSelectView(discord.ui.View):
     """View for selecting items to queue for."""
 
-    def __init__(self, bot, all_items_listings: List[Dict[str, Any]], zone: str, available_items: List[str]):
+    def __init__(self, bot, all_items_listings, zone, available_items):
         super().__init__(timeout=300)
         self.bot = bot
         self.all_items_listings = all_items_listings
@@ -564,9 +564,7 @@ class QueueSelectView(discord.ui.View):
         # Create dropdown with available items (max 25)
         options = []
         for item in available_items[:25]:
-            options.append(
-                discord.SelectOption(label=item, value=item)
-            )
+            options.append(discord.SelectOption(label=item, value=item))
 
         if options:
             self.item_select.options = options
@@ -578,37 +576,33 @@ class QueueSelectView(discord.ui.View):
     async def item_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         """Handle item selection for queue."""
         try:
-            item_name = select.values[0]
+            selected_item = select.values[0]
 
-            # Use first available All Items listing
-            target_listing = self.all_items_listings[0] if self.all_items_listings else None
-
-            if not target_listing:
+            # Find the first "All Items" listing to queue for
+            if not self.all_items_listings:
                 await interaction.response.send_message(
-                    "❌ No All Items listings available.",
+                    "❌ No 'All Items' listings available.",
                     ephemeral=True
                 )
                 return
 
+            listing = self.all_items_listings[0]  # Use first available listing
+
             # Add to queue
             success = await self.bot.db_manager.add_to_queue(
-                target_listing['id'], interaction.user.id, item_name
+                listing['id'], interaction.user.id, selected_item
             )
 
             if success:
-                seller = interaction.guild.get_member(target_listing['user_id'])
-                seller_name = seller.display_name if seller else "Unknown"
-                
                 await interaction.response.send_message(
-                    f"✅ You've been added to the queue for **{item_name}** from {seller_name}'s All Items listing!",
+                    f"✅ You've been added to the queue for **{selected_item}**!",
                     ephemeral=True
                 )
-                
+
                 # Refresh the marketplace embed
-                from bot.services.marketplace import MarketplaceService
-                marketplace_service = MarketplaceService(self.bot)
-                await marketplace_service.refresh_marketplace_embeds_for_zone(
-                    interaction.guild.id, "WTS", self.zone
+                marketplace_service = self.bot.get_cog('MarketplaceCommands').marketplace_service
+                await marketplace_service.refresh_marketplace_embed(
+                    interaction.guild.id, interaction.channel.id
                 )
             else:
                 await interaction.response.send_message(
@@ -617,11 +611,30 @@ class QueueSelectView(discord.ui.View):
                 )
 
         except Exception as e:
-            logger.error(f"Error in queue item selection: {e}")
+            logger.error(f"Error in queue selection: {e}")
             await interaction.response.send_message(
                 "❌ An error occurred while joining the queue.",
                 ephemeral=True
             )
+
+class QueueModal(discord.ui.Modal, title="Join Queue"):
+    """Modal for joining a queue for WTS All Items listings."""
+
+    def __init__(self, bot, all_items_listings, zone):
+        super().__init__()
+        self.bot = bot
+        self.all_items_listings = all_items_listings
+        self.zone = zone
+
+    item_name = discord.ui.TextInput(
+        label="Item Name",
+        placeholder="Enter the specific item you want to queue for...",
+        max_length=200,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle queue join submission."""
 
 class ReputationModal(discord.ui.Modal):
     """Modal for submitting reputation ratings."""
