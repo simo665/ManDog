@@ -304,7 +304,7 @@ class MarketplaceView(discord.ui.View):
             except:
                 pass
 
-    @discord.ui.button(label="🔥 Join Queue", style=discord.ButtonStyle.secondary, emoji="🔥", row=1)
+    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.secondary, emoji="⏱️", row=1)
     async def join_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle join queue button for WTS listings."""
         try:

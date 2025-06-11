@@ -32,7 +32,7 @@ class DatabaseManager:
             logger.error(f"Failed to initialize database pool: {e}")
             raise
 
-    async defclose(self):
+    async def close(self):
         """Close the database connection pool."""
         if self.pool:
             await self.pool.close()
