@@ -155,14 +155,23 @@ class MarketplaceEmbeds:
                     individual_listing.append(f"⏰ **Time:** {time_str}")
 
                     # Handle items and queues
-                    if listing['item'].lower() == "all items" and listing.get('queued_items'):
-                        individual_listing.append("📦 **Items:**")
-                        for item_name, user_ids in listing['queued_items'].items():
-                            user_mentions = [f"<@{uid}>" for uid in user_ids]
-                            item_line = f"• {item_name}"
+                    if listing.get('queued_items'):
+                        individual_listing.append("📦 **Item:**")
+                        if listing['item'].lower() == "all items":
+                            # Show queued items for "All Items" listings
+                            for item_name, user_ids in listing['queued_items'].items():
+                                user_mentions = [f"<@{uid}>" for uid in user_ids]
+                                item_line = f"> **{item_name}** – **Queue:** {' • '.join(user_mentions)}"
+                                individual_listing.append(item_line)
+                        else:
+                            # Show queue for specific item
+                            user_mentions = [f"<@{uid}>" for uid in listing['queued_items'].get(listing['item'], [])]
+                            item_line = f"> **{listing['item']}"
                             if listing['quantity'] > 1:
                                 item_line += f" ×{listing['quantity']}"
-                            item_line += f" – Queued: {', '.join(user_mentions)}"
+                            item_line += "**"
+                            if user_mentions:
+                                item_line += f" – **Queue:** {' • '.join(user_mentions)}"
                             individual_listing.append(item_line)
                     else:
                         item_line = f"📦 **Item:** {listing['item']}"

@@ -32,7 +32,7 @@ class DatabaseManager:
             logger.error(f"Failed to initialize database pool: {e}")
             raise
 
-    async def close(self):
+    async defclose(self):
         """Close the database connection pool."""
         if self.pool:
             await self.pool.close()
@@ -325,19 +325,35 @@ class DatabaseManager:
             logger.error(f"Error getting listing queues: {e}")
             return {}
 
-    async def add_to_queue(self, user_id: int, listing_id: int, requested_item: str) -> bool:
-        """Add a buyer to queue for a specific item under WTS All Items listing."""
+    async def add_to_queue(self, listing_id: int, user_id: int, item_name: str) -> bool:
+        """Add a user to the queue for a specific item."""
         try:
+            # Check if the user is the listing owner
+            listing_owner = await self.execute_query(
+                "SELECT user_id FROM listings WHERE id = $1",
+                listing_id
+            )
+
+            if listing_owner and listing_owner[0]['user_id'] == user_id:
+                return False  # Owner cannot queue for their own item
+
+            # Try to insert the queue entry
             await self.execute_command(
                 """
-                INSERT INTO queues (user_id, listing_id, queue_type, requested_item, created_at)
-                VALUES ($1, $2, 'buyer_queue', $3, $4)
-                ON CONFLICT (user_id, listing_id) 
-                DO UPDATE SET requested_item = $3, created_at = $4
+                INSERT INTO listing_queues (listing_id, user_id, item_name)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (listing_id, user_id, item_name) DO NOTHING
                 """,
-                user_id, listing_id, requested_item, datetime.now(timezone.utc)
+                listing_id, user_id, item_name
             )
-            return True
+
+            # Check if the insert was successful
+            result = await self.execute_query(
+                "SELECT id FROM listing_queues WHERE listing_id = $1 AND user_id = $2 AND item_name = $3",
+                listing_id, user_id, item_name
+            )
+
+            return len(result) > 0
         except Exception as e:
             logger.error(f"Error adding to queue: {e}")
             return False
@@ -535,22 +551,6 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error ensuring user exists: {e}")
             raise
-
-    async def add_to_queue(self, listing_id: int, user_id: int, item_name: str) -> bool:
-        """Add a user to the queue for a specific item."""
-        try:
-            await self.execute_command(
-                """
-                INSERT INTO listing_queues (listing_id, user_id, item_name, created_at)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (listing_id, user_id, item_name) DO NOTHING
-                """,
-                listing_id, user_id, item_name, datetime.now(timezone.utc)
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Error adding to queue: {e}")
-            return False
 
     async def get_listing_queues(self, listing_id: int) -> Dict[str, List[int]]:
         """Get all queued items and buyers for a listing."""

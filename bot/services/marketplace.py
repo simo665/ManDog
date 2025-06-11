@@ -44,12 +44,12 @@ class MarketplaceService:
             # Get active listings ONLY for this specific listing type and zone
             listings = await self.bot.db_manager.get_zone_listings(guild_id, listing_type, zone)
             
-            # NEW: For WTS listings, add queue data for "All Items" entries
+            # Add queue data for all WTS listings
             if listing_type.upper() == "WTS":
                 for listing in listings:
-                    if listing.get('item', '').lower() == "all items":
-                        # Get queued items for this listing
-                        queued_items = await self.bot.db_manager.get_listing_queues(listing['id'])
+                    # Get queued items for this listing
+                    queued_items = await self.bot.db_manager.get_listing_queues(listing['id'])
+                    if queued_items:
                         listing['queued_items'] = queued_items
 
             # Create updated embed with pagination (start at page 0)

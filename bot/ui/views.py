@@ -306,7 +306,7 @@ class MarketplaceView(discord.ui.View):
 
     @discord.ui.button(label="🔥 Join Queue", style=discord.ButtonStyle.secondary, emoji="🔥", row=1)
     async def join_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle join queue button for WTS All Items listings."""
+        """Handle join queue button for WTS listings."""
         try:
             # Only show queue button for WTS listings
             if self.listing_type.upper() != "WTS":
@@ -316,26 +316,26 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Check if there are any "All Items" listings in current zone
-            all_items_listings = await self.bot.db_manager.execute_query(
+            # Get all active WTS listings in current zone
+            wts_listings = await self.bot.db_manager.execute_query(
                 """
                 SELECT id, user_id, item, scheduled_time, notes 
                 FROM listings 
                 WHERE guild_id = $1 AND listing_type = 'WTS' AND zone = $2 
-                AND LOWER(item) = 'all items' AND active = TRUE
+                AND active = TRUE
                 ORDER BY created_at ASC
                 """,
                 interaction.guild.id, self.zone
             )
 
-            if not all_items_listings:
+            if not wts_listings:
                 await interaction.response.send_message(
-                    f"❌ No 'All Items' WTS listings found in {self.zone.title()} to queue for.",
+                    f"❌ No WTS listings found in {self.zone.title()} to queue for.",
                     ephemeral=True
                 )
                 return
 
-            # Get available items for this zone
+            # Get all available items (both specific items and from "All Items" listings)
             from config.ffxi_data import get_zone_subcategories, get_subcategory_items
             
             all_items = []
@@ -343,6 +343,11 @@ class MarketplaceView(discord.ui.View):
             for subcat in subcategories:
                 items = get_subcategory_items(self.zone, subcat)
                 all_items.extend(items)
+
+            # Add specific items from listings
+            for listing in wts_listings:
+                if listing['item'].lower() != "all items":
+                    all_items.append(listing['item'])
 
             # Remove duplicates and "All Items"
             unique_items = []
@@ -354,7 +359,7 @@ class MarketplaceView(discord.ui.View):
 
             if not unique_items:
                 await interaction.response.send_message(
-                    f"❌ No specific items available for {self.zone.title()}.",
+                    f"❌ No items available for {self.zone.title()}.",
                     ephemeral=True
                 )
                 return
@@ -362,7 +367,7 @@ class MarketplaceView(discord.ui.View):
             # Import here to avoid circular imports
             from bot.ui.modals import QueueSelectView
 
-            view = QueueSelectView(self.bot, all_items_listings, self.zone, unique_items)
+            view = QueueSelectView(self.bot, wts_listings, self.zone, unique_items)
             
             embed = discord.Embed(
                 title="🔥 Join Queue",
@@ -374,10 +379,14 @@ class MarketplaceView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Error opening queue selection: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while opening the queue selection.",
-                ephemeral=True
-            )
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while opening the queue selection.",
+                        ephemeral=True
+                    )
+            except:
+                pass
 
 class SubcategorySelectView(discord.ui.View):
     """View for selecting subcategory."""

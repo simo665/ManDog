@@ -555,10 +555,10 @@ class CustomTimeModal(discord.ui.Modal):
 class QueueSelectView(discord.ui.View):
     """View for selecting items to queue for."""
 
-    def __init__(self, bot, all_items_listings, zone, available_items):
+    def __init__(self, bot, wts_listings, zone, available_items):
         super().__init__(timeout=300)
         self.bot = bot
-        self.all_items_listings = all_items_listings
+        self.wts_listings = wts_listings
         self.zone = zone
 
         # Create dropdown with available items (max 25)
@@ -578,19 +578,32 @@ class QueueSelectView(discord.ui.View):
         try:
             selected_item = select.values[0]
 
-            # Find the first "All Items" listing to queue for
-            if not self.all_items_listings:
+            # Find appropriate listing to queue for
+            target_listing = None
+            
+            # First, look for "All Items" listings
+            for listing in self.wts_listings:
+                if listing['item'].lower() == "all items" and listing['user_id'] != interaction.user.id:
+                    target_listing = listing
+                    break
+            
+            # If no "All Items" found, look for specific item listings
+            if not target_listing:
+                for listing in self.wts_listings:
+                    if listing['item'].lower() == selected_item.lower() and listing['user_id'] != interaction.user.id:
+                        target_listing = listing
+                        break
+
+            if not target_listing:
                 await interaction.response.send_message(
-                    "❌ No 'All Items' listings available.",
+                    f"❌ No available listings for **{selected_item}** that you can queue for.",
                     ephemeral=True
                 )
                 return
 
-            listing = self.all_items_listings[0]  # Use first available listing
-
             # Add to queue
             success = await self.bot.db_manager.add_to_queue(
-                listing['id'], interaction.user.id, selected_item
+                target_listing['id'], interaction.user.id, selected_item
             )
 
             if success:
@@ -600,22 +613,27 @@ class QueueSelectView(discord.ui.View):
                 )
 
                 # Refresh the marketplace embed
-                marketplace_service = self.bot.get_cog('MarketplaceCommands').marketplace_service
+                from bot.services.marketplace import MarketplaceService
+                marketplace_service = MarketplaceService(self.bot)
                 await marketplace_service.refresh_marketplace_embed(
                     interaction.guild.id, interaction.channel.id
                 )
             else:
                 await interaction.response.send_message(
-                    "❌ Could not add you to the queue. You may already be queued for this item.",
+                    "❌ Could not add you to the queue. You may already be queued for this item or own the listing.",
                     ephemeral=True
                 )
 
         except Exception as e:
             logger.error(f"Error in queue selection: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while joining the queue.",
-                ephemeral=True
-            )
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while joining the queue.",
+                        ephemeral=True
+                    )
+            except:
+                pass
 
 class QueueModal(discord.ui.Modal, title="Join Queue"):
     """Modal for joining a queue for WTS All Items listings."""
