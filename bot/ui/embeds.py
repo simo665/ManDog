@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class MarketplaceEmbeds:
     """Utility class for creating Discord embeds."""
-    
+
     # FFXI-themed colors
     COLORS = {
         'primary': 0x1E40AF,      # Blue
@@ -22,7 +22,7 @@ class MarketplaceEmbeds:
         'wts': 0xF59E0B,          # Amber for WTS
         'wtb': 0x3B82F6           # Blue for WTB
     }
-    
+
     def create_setup_embed(self) -> discord.Embed:
         """Create the initial setup embed."""
         embed = discord.Embed(
@@ -39,7 +39,7 @@ class MarketplaceEmbeds:
             color=self.COLORS['primary'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         embed.add_field(
             name="📋 What will be created:",
             value=(
@@ -50,10 +50,10 @@ class MarketplaceEmbeds:
             ),
             inline=False
         )
-        
+
         embed.set_footer(text="Mandok Marketplace Bot", icon_url="https://cdn.discordapp.com/embed/avatars/0.png")
         return embed
-    
+
     def create_admin_embed(self) -> discord.Embed:
         """Create admin control panel embed."""
         embed = discord.Embed(
@@ -62,7 +62,7 @@ class MarketplaceEmbeds:
             color=self.COLORS['info'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         embed.add_field(
             name="📊 Available Commands",
             value=(
@@ -73,9 +73,9 @@ class MarketplaceEmbeds:
             ),
             inline=False
         )
-        
+
         return embed
-    
+
     def create_setup_success_embed(self, channel_count: int) -> discord.Embed:
         """Create success message after setup."""
         embed = discord.Embed(
@@ -88,15 +88,15 @@ class MarketplaceEmbeds:
             color=self.COLORS['success'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         return embed
-    
+
     def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]], page: int = 0) -> discord.Embed:
         """Create the main marketplace embed for a channel with pagination."""
         # Ensure we always use the correct title and color based on the provided listing_type
         title_emoji = "🔸" if listing_type.upper() == "WTS" else "🔹"
         color = self.COLORS['wts'] if listing_type.upper() == "WTS" else self.COLORS['wtb']
-        
+
         # Calculate pagination
         items_per_page = 10
         total_pages = max(1, (len(listings) + items_per_page - 1) // items_per_page)
@@ -104,16 +104,16 @@ class MarketplaceEmbeds:
         start_idx = page * items_per_page
         end_idx = start_idx + items_per_page
         page_listings = listings[start_idx:end_idx]
-        
+
         page_info = f" (Page {page + 1}/{total_pages})" if total_pages > 1 else ""
-        
+
         embed = discord.Embed(
             title=f"{title_emoji} {listing_type} - {zone.title()}{page_info}",
             description=f"Active {listing_type} listings for {zone} content",
             color=color,
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         if not listings:
             embed.add_field(
                 name="📝 No Active Listings",
@@ -134,78 +134,63 @@ class MarketplaceEmbeds:
                 if listing.get('listing_type', '').upper() != listing_type.upper():
                     logger.warning(f"Skipping mismatched listing in embed: expected {listing_type}, got {listing.get('listing_type')}")
                     continue
-                
+
                 subcat = listing.get('subcategory', 'Other')
                 if subcat not in grouped:
                     grouped[subcat] = []
                 grouped[subcat].append(listing)
-            
+
             # Add fields for each subcategory
             for subcat, subcat_listings in grouped.items():
                 listing_text = []
                 for listing in subcat_listings:
+                    # Format listing with user info
                     user_mention = f"<@{listing['user_id']}>"
-                    item = listing.get('item', 'All Items')
-                    quantity = listing.get('quantity', 1)
-                    notes = listing.get('notes', '')
-                    scheduled_time = listing.get('scheduled_time')
-                    
-                    # Format listing line with better organization
-                    listing_line = f"• **{item}**"
-                    if quantity > 1:
-                        listing_line += f" ×{quantity}"
-                    listing_line += f" - {user_mention}"
-                    
-                    # Add scheduled time if available
-                    if scheduled_time:
-                        try:
-                            if hasattr(scheduled_time, 'timestamp'):
-                                timestamp = int(scheduled_time.timestamp())
-                            else:
-                                # Handle datetime objects that might not have timestamp method
-                                if isinstance(scheduled_time, datetime):
-                                    timestamp = int(scheduled_time.timestamp())
-                                else:
-                                    timestamp = int(scheduled_time)
-                            listing_line += f" <t:{timestamp}:R>"
-                        except Exception as e:
-                            logger.warning(f"Could not format scheduled time: {e}")
-                            # Fallback to basic display
-                            listing_line += f" (Scheduled)"
-                    
-                    # Add notes if available (truncated)
-                    if notes:
-                        listing_line += f"\n  *{notes[:80]}{'...' if len(notes) > 80 else ''}*"
-                    
-                    # NEW: Add queue display for WTS "All Items" listings
-                    if listing_type.upper() == "WTS" and item.lower() == "all items":
-                        queued_items = listing.get('queued_items', {})
-                        if queued_items:
-                            listing_line += f"\n  **📦 Queued Items:**"
-                            for queue_item, queue_buyers in queued_items.items():
-                                if queue_buyers:
-                                    buyer_mentions = [f"<@{buyer_id}>" for buyer_id in queue_buyers]
-                                    listing_line += f"\n    • {queue_item} – Queued: {', '.join(buyer_mentions)}"
-                    
-                    listing_text.append(listing_line)
-                
-                embed.add_field(
-                    name=f"📂 {subcat} ({len(subcat_listings)} items)",
-                    value="\n".join(listing_text) if listing_text else "No listings",
-                    inline=False
-                )
-        
+                    time_str = listing.get('scheduled_time').strftime("%B %d – %I%p").replace(" 0", " ").replace("AM", "AM").replace("PM", "PM") if listing.get('scheduled_time') else "Unknown"
+
+                    # Build listing text
+                    listing_text = f"🧾 **{listing_type}** by {user_mention}\n"
+                    listing_text += f"⏰ **Time:** {time_str}\n"
+
+                    # Handle items and queues
+                    if listing['item'].lower() == "all items" and listing.get('queued_items'):
+                        listing_text += f"📦 **Items:**\n"
+                        for item_name, user_ids in listing['queued_items'].items():
+                            user_mentions = [f"<@{uid}>" for uid in user_ids]
+                            listing_text += f"• {item_name}"
+                            if listing['quantity'] > 1:
+                                listing_text += f" ×{listing['quantity']}"
+                            listing_text += f" – Queued: {', '.join(user_mentions)}\n"
+                    else:
+                        listing_text += f"📦 **Item:** {listing['item']}"
+                        if listing['quantity'] > 1:
+                            listing_text += f" ×{listing['quantity']}"
+
+                    if listing.get('notes'):
+                        listing_text += f"\n📝 **Notes:** {listing['notes']}"
+
+                    # Add reputation if available
+                    if listing.get('reputation_avg') and float(listing['reputation_avg']) > 0:
+                        rep_stars = "⭐" * min(5, int(float(listing['reputation_avg'])))
+                        listing_text += f"\n{rep_stars} {float(listing['reputation_avg']):.1f}"
+
+                    embed.add_field(
+                        name=f"📂 {subcat} ({len(subcat_listings)} items)",
+                        value="\n".join(listing_text) if listing_text else "No listings",
+                        inline=False
+                    )
+
         footer_text = f"Use the buttons below to manage your {listing_type} listings"
         if total_pages > 1:
             footer_text += f" • Page {page + 1} of {total_pages}"
-        
+
         embed.set_footer(
             text=footer_text,
             icon_url="https://cdn.discordapp.com/embed/avatars/0.png"
         )
-        
+
         return embed
-    
+
     def create_listing_confirmation_embed(self, listing_type: str, item: str, scheduled_time: datetime) -> discord.Embed:
         """Create confirmation embed for new listing."""
         embed = discord.Embed(
@@ -214,21 +199,21 @@ class MarketplaceEmbeds:
             color=self.COLORS['success'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         embed.add_field(
             name="📅 Scheduled Time",
             value=f"<t:{int(scheduled_time.timestamp())}:F>",
             inline=True
         )
-        
+
         embed.add_field(
             name="⏰ Expires In",
             value="14 days (with reminders)",
             inline=True
         )
-        
+
         return embed
-    
+
     def create_error_embed(self, message: str) -> discord.Embed:
         """Create error embed."""
         embed = discord.Embed(
@@ -237,9 +222,9 @@ class MarketplaceEmbeds:
             color=self.COLORS['error'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         return embed
-    
+
     def create_reputation_embed(self, user: discord.User, reputation_data: Dict[str, Any]) -> discord.Embed:
         """Create reputation display embed."""
         embed = discord.Embed(
@@ -247,26 +232,26 @@ class MarketplaceEmbeds:
             color=self.COLORS['info'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         embed.set_thumbnail(url=user.display_avatar.url)
-        
+
         avg_rating = reputation_data.get('average_rating', 0)
         total_ratings = reputation_data.get('total_ratings', 0)
         activity_score = reputation_data.get('activity_score', 0)
-        
+
         # Star display
         stars = "⭐" * int(avg_rating) + "☆" * (5 - int(avg_rating))
-        
+
         embed.add_field(
             name="📊 Overall Rating",
             value=f"{stars} ({avg_rating:.1f}/5.0)\nBased on {total_ratings} ratings",
             inline=True
         )
-        
+
         embed.add_field(
             name="📈 Activity Score",
             value=f"{activity_score} points",
             inline=True
         )
-        
+
         return embed

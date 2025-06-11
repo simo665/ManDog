@@ -552,74 +552,47 @@ class CustomTimeModal(discord.ui.Modal):
                 ephemeral=True
             )
 
-class QueueModal(discord.ui.Modal):
-    """Modal for joining a queue for All Items WTS listings."""
+class QueueSelectView(discord.ui.View):
+    """View for selecting items to queue for."""
 
-    def __init__(self, bot, all_items_listings: List[Dict[str, Any]], zone: str):
-        super().__init__(title="Join Queue for Item")
+    def __init__(self, bot, all_items_listings: List[Dict[str, Any]], zone: str, available_items: List[str]):
+        super().__init__(timeout=300)
         self.bot = bot
         self.all_items_listings = all_items_listings
         self.zone = zone
 
-        self.item_input = discord.ui.TextInput(
-            label="Item Name",
-            placeholder="Enter the specific item you want to queue for",
-            max_length=200,
-            required=True,
-            style=discord.TextStyle.short
-        )
+        # Create dropdown with available items (max 25)
+        options = []
+        for item in available_items[:25]:
+            options.append(
+                discord.SelectOption(label=item, value=item)
+            )
 
-        self.listing_select = discord.ui.TextInput(
-            label="Seller (Optional)",
-            placeholder="Leave blank to queue for any seller, or enter seller name",
-            max_length=100,
-            required=False,
-            style=discord.TextStyle.short
-        )
+        if options:
+            self.item_select.options = options
+        else:
+            # Remove the select if no options
+            self.remove_item(self.item_select)
 
-        self.add_item(self.item_input)
-        self.add_item(self.listing_select)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        """Handle queue submission."""
+    @discord.ui.select(placeholder="Choose an item to queue for...")
+    async def item_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle item selection for queue."""
         try:
-            item_name = self.item_input.value.strip()
-            preferred_seller = self.listing_select.value.strip() if self.listing_select.value else None
+            item_name = select.values[0]
 
-            if not item_name:
-                await interaction.response.send_message(
-                    "❌ Please enter an item name.",
-                    ephemeral=True
-                )
-                return
-
-            # Find target listing
-            target_listing = None
-            if preferred_seller:
-                # Try to find listing by preferred seller
-                for listing in self.all_items_listings:
-                    seller = interaction.guild.get_member(listing['user_id'])
-                    if seller and (preferred_seller.lower() in seller.display_name.lower() or 
-                                 preferred_seller.lower() in seller.name.lower()):
-                        target_listing = listing
-                        break
-            
-            # If no preferred seller or not found, use first available
-            if not target_listing and self.all_items_listings:
-                target_listing = self.all_items_listings[0]
+            # Use first available All Items listing
+            target_listing = self.all_items_listings[0] if self.all_items_listings else None
 
             if not target_listing:
                 await interaction.response.send_message(
-                    "❌ No suitable All Items listings found.",
+                    "❌ No All Items listings available.",
                     ephemeral=True
                 )
                 return
 
             # Add to queue
             success = await self.bot.db_manager.add_to_queue(
-                listing_id=target_listing['id'],
-                user_id=interaction.user.id,
-                item_name=item_name
+                target_listing['id'], interaction.user.id, item_name
             )
 
             if success:
@@ -644,7 +617,7 @@ class QueueModal(discord.ui.Modal):
                 )
 
         except Exception as e:
-            logger.error(f"Error in queue modal submission: {e}")
+            logger.error(f"Error in queue item selection: {e}")
             await interaction.response.send_message(
                 "❌ An error occurred while joining the queue.",
                 ephemeral=True

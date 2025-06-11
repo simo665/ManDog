@@ -335,16 +335,47 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Import here to avoid circular imports
-            from bot.ui.modals import QueueModal
+            # Get available items for this zone
+            from config.ffxi_data import get_zone_subcategories, get_subcategory_items
+            
+            all_items = []
+            subcategories = get_zone_subcategories(self.zone)
+            for subcat in subcategories:
+                items = get_subcategory_items(self.zone, subcat)
+                all_items.extend(items)
 
-            modal = QueueModal(self.bot, all_items_listings, self.zone)
-            await interaction.response.send_modal(modal)
+            # Remove duplicates and "All Items"
+            unique_items = []
+            seen = set()
+            for item in all_items:
+                if item.lower() != "all items" and item not in seen:
+                    unique_items.append(item)
+                    seen.add(item)
+
+            if not unique_items:
+                await interaction.response.send_message(
+                    f"❌ No specific items available for {self.zone.title()}.",
+                    ephemeral=True
+                )
+                return
+
+            # Import here to avoid circular imports
+            from bot.ui.modals import QueueSelectView
+
+            view = QueueSelectView(self.bot, all_items_listings, self.zone, unique_items)
+            
+            embed = discord.Embed(
+                title="🔥 Join Queue",
+                description=f"Select an item to queue for in {self.zone.title()}:",
+                color=0xFF6B6B
+            )
+
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error opening queue modal: {e}")
+            logger.error(f"Error opening queue selection: {e}")
             await interaction.response.send_message(
-                "❌ An error occurred while opening the queue form.",
+                "❌ An error occurred while opening the queue selection.",
                 ephemeral=True
             )
 
