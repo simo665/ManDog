@@ -266,9 +266,8 @@ class DatabaseManager:
         return None
 
     async def get_zone_listings(self, guild_id: int, listing_type: str, zone: str) -> List[Dict[str, Any]]:
-        """Get active listings for a specific zone and type."""
+        """Get all active listings for a specific zone and type."""
         try:
-            # Ensure we filter strictly by guild_id, listing_type, AND zone
             query = """
                 SELECT l.*, u.username, u.reputation_avg
                 FROM listings l
@@ -297,6 +296,66 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting zone listings: {e}")
             return []
+
+    async def get_listing_queues(self, listing_id: int) -> Dict[str, List[int]]:
+        """Get queued items and buyers for a specific listing (for WTS All Items)."""
+        try:
+            queue_data = await self.execute_query(
+                """
+                SELECT q.user_id, q.requested_item
+                FROM queues q
+                WHERE q.listing_id = $1 AND q.queue_type = 'buyer_queue'
+                ORDER BY q.created_at ASC
+                """,
+                listing_id
+            )
+
+            # Group by requested item
+            queued_items = {}
+            for queue_entry in queue_data or []:
+                item = queue_entry['requested_item']
+                user_id = queue_entry['user_id']
+
+                if item not in queued_items:
+                    queued_items[item] = []
+                queued_items[item].append(user_id)
+
+            return queued_items
+        except Exception as e:
+            logger.error(f"Error getting listing queues: {e}")
+            return {}
+
+    async def add_to_queue(self, user_id: int, listing_id: int, requested_item: str) -> bool:
+        """Add a buyer to queue for a specific item under WTS All Items listing."""
+        try:
+            await self.execute_command(
+                """
+                INSERT INTO queues (user_id, listing_id, queue_type, requested_item, created_at)
+                VALUES ($1, $2, 'buyer_queue', $3, $4)
+                ON CONFLICT (user_id, listing_id) 
+                DO UPDATE SET requested_item = $3, created_at = $4
+                """,
+                user_id, listing_id, requested_item, datetime.now(timezone.utc)
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error adding to queue: {e}")
+            return False
+
+    async def remove_from_queue(self, user_id: int, listing_id: int) -> bool:
+        """Remove a buyer from queue for a listing."""
+        try:
+            await self.execute_command(
+                """
+                DELETE FROM queues 
+                WHERE user_id = $1 AND listing_id = $2 AND queue_type = 'buyer_queue'
+                """,
+                user_id, listing_id
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error removing from queue: {e}")
+            return False
 
     async def get_user_listings(self, user_id: int, guild_id: int, listing_type: str, zone: str) -> List[Dict[str, Any]]:
         """Get user's active listings for a specific zone."""

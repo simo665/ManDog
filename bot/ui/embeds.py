@@ -177,6 +177,16 @@ class MarketplaceEmbeds:
                     if notes:
                         listing_line += f"\n  *{notes[:80]}{'...' if len(notes) > 80 else ''}*"
                     
+                    # NEW: Add queue display for WTS "All Items" listings
+                    if listing_type.upper() == "WTS" and item.lower() == "all items":
+                        queued_items = listing.get('queued_items', {})
+                        if queued_items:
+                            listing_line += f"\n  **📦 Queued Items:**"
+                            for queue_item, queue_buyers in queued_items.items():
+                                if queue_buyers:
+                                    buyer_mentions = [f"<@{buyer_id}>" for buyer_id in queue_buyers]
+                                    listing_line += f"\n    • {queue_item} – Queued: {', '.join(buyer_mentions)}"
+                    
                     listing_text.append(listing_line)
                 
                 embed.add_field(

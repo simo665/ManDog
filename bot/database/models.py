@@ -122,6 +122,7 @@ class DatabaseSchema:
                 user_id BIGINT NOT NULL,
                 listing_id INTEGER NOT NULL,
                 queue_type VARCHAR(20) NOT NULL CHECK (queue_type IN ('buyer_queue', 'seller_queue')),
+                requested_item VARCHAR(200),
                 priority INTEGER DEFAULT 0,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 notified BOOLEAN DEFAULT FALSE,

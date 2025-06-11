@@ -43,6 +43,14 @@ class MarketplaceService:
 
             # Get active listings ONLY for this specific listing type and zone
             listings = await self.bot.db_manager.get_zone_listings(guild_id, listing_type, zone)
+            
+            # NEW: For WTS listings, add queue data for "All Items" entries
+            if listing_type.upper() == "WTS":
+                for listing in listings:
+                    if listing.get('item', '').lower() == "all items":
+                        # Get queued items for this listing
+                        queued_items = await self.bot.db_manager.get_listing_queues(listing['id'])
+                        listing['queued_items'] = queued_items
 
             # Create updated embed with pagination (start at page 0)
             # Force the embed to use the channel's listing type and zone
@@ -148,6 +156,9 @@ class MarketplaceService:
                     logger.info(f"✅ MARKETPLACE DEBUG: Successfully triggered order confirmation workflow for listing {listing_id}")
                 else:
                     logger.info(f"❌ MARKETPLACE DEBUG: No matches found for listing {listing_id}")
+                
+                # NEW: Refresh marketplace embeds to show updated queue data
+                await self.refresh_marketplace_embeds_for_zone(guild_id, listing_data['listing_type'], listing_data['zone'])
 
                 return listing_id
 

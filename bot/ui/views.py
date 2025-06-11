@@ -1,3 +1,4 @@
+python
 """
 Discord UI Views for the marketplace bot.
 """
@@ -151,13 +152,13 @@ class MarketplaceView(discord.ui.View):
                 channel_data = channel_info[0]
                 actual_listing_type = channel_data['listing_type']
                 actual_zone = channel_data['zone']
-                
+
                 # Update instance variables with correct values
                 self.listing_type = actual_listing_type
                 self.zone = actual_zone
-                
+
                 logger.info(f"Updated view context: {self.listing_type} in {self.zone} for channel {interaction.channel.id}")
-            
+
             # Validate zone name
             if not self.zone or self.zone == "unknown":
                 await interaction.response.send_message(
@@ -249,13 +250,13 @@ class MarketplaceView(discord.ui.View):
                 channel_data = channel_info[0]
                 actual_listing_type = channel_data['listing_type']
                 actual_zone = channel_data['zone']
-                
+
                 # Update instance variables with correct values
                 self.listing_type = actual_listing_type
                 self.zone = actual_zone
-                
+
                 logger.info(f"Updated view context: {self.listing_type} in {self.zone} for channel {interaction.channel.id}")
-            
+
             # Validate zone name
             if not self.zone or self.zone == "unknown":
                 await interaction.response.send_message(
@@ -307,6 +308,67 @@ class MarketplaceView(discord.ui.View):
                     )
             except:
                 pass
+
+    @discord.ui.button(label="📝 Create Listing", style=discord.ButtonStyle.green, emoji="📝")
+    async def create_listing(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle create listing button."""
+        try:
+            # Import here to avoid circular imports
+            from bot.ui.modals import ListingModal
+
+            modal = ListingModal(self.bot, self.listing_type, self.zone)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            logger.error(f"Error opening listing modal: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while opening the listing form.",
+                ephemeral=True
+            )
+
+    @discord.ui.button(label="🔥 Join Queue", style=discord.ButtonStyle.secondary, emoji="🔥", row=1)
+    async def join_queue(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle join queue button for WTS All Items listings."""
+        try:
+            # Only show queue button for WTS listings
+            if self.listing_type.upper() != "WTS":
+                await interaction.response.send_message(
+                    "❌ Queue feature is only available for WTS (Want to Sell) listings.",
+                    ephemeral=True
+                )
+                return
+
+            # Check if there are any "All Items" listings in current zone
+            all_items_listings = await self.bot.db_manager.execute_query(
+                """
+                SELECT id, user_id, item, scheduled_time, notes 
+                FROM listings 
+                WHERE guild_id = $1 AND listing_type = 'WTS' AND zone = $2 
+                AND LOWER(item) = 'all items' AND active = TRUE
+                ORDER BY created_at ASC
+                """,
+                interaction.guild.id, self.zone
+            )
+
+            if not all_items_listings:
+                await interaction.response.send_message(
+                    f"❌ No 'All Items' WTS listings found in {self.zone.title()} to queue for.",
+                    ephemeral=True
+                )
+                return
+
+            # Import here to avoid circular imports
+            from bot.ui.modals import QueueModal
+
+            modal = QueueModal(self.bot, all_items_listings, self.zone)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            logger.error(f"Error opening queue modal: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while opening the queue form.",
+                ephemeral=True
+            )
 
 class SubcategorySelectView(discord.ui.View):
     """View for selecting subcategory."""
