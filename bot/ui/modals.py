@@ -581,16 +581,16 @@ class QueueSelectView(discord.ui.View):
             # Find appropriate listing to queue for
             target_listing = None
             
-            # First, look for "All Items" listings
+            # Look for specific item listings first
             for listing in self.wts_listings:
-                if listing['item'].lower() == "all items" and listing['user_id'] != interaction.user.id:
+                if listing['item'].lower() == selected_item.lower() and listing['user_id'] != interaction.user.id:
                     target_listing = listing
                     break
             
-            # If no "All Items" found, look for specific item listings
+            # If no specific item found, look for any listing where this user can queue
             if not target_listing:
                 for listing in self.wts_listings:
-                    if listing['item'].lower() == selected_item.lower() and listing['user_id'] != interaction.user.id:
+                    if listing['user_id'] != interaction.user.id:
                         target_listing = listing
                         break
 

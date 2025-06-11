@@ -49,8 +49,7 @@ class MarketplaceService:
                 for listing in listings:
                     # Get queued items for this listing
                     queued_items = await self.bot.db_manager.get_listing_queues(listing['id'])
-                    if queued_items:
-                        listing['queued_items'] = queued_items
+                    listing['queued_items'] = queued_items  # Always add, even if empty
 
             # Create updated embed with pagination (start at page 0)
             # Force the embed to use the channel's listing type and zone

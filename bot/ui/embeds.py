@@ -149,43 +149,38 @@ class MarketplaceEmbeds:
                     user_mention = f"<@{listing['user_id']}>"
                     time_str = listing.get('scheduled_time').strftime("%B %d – %I%p").replace(" 0", " ").replace("AM", "AM").replace("PM", "PM") if listing.get('scheduled_time') else "Unknown"
 
-                    # Build individual listing text
+                    # Build individual listing text with new format
                     individual_listing = []
-                    individual_listing.append(f"🧾 **{listing_type}** by {user_mention}")
-                    individual_listing.append(f"⏰ **Time:** {time_str}")
-
-                    # Handle items and queues
+                    individual_listing.append(f"> 📦 **Item:**")
+                    
+                    # Handle items and queues with new format
+                    item_name = listing['item']
+                    if listing['quantity'] > 1:
+                        item_name += f" ×{listing['quantity']}"
+                    
+                    item_line = f">  ╰┈➤ **{item_name}** by {user_mention}"
+                    individual_listing.append(item_line)
+                    
+                    individual_listing.append(f"> ⏰ **Time:** {time_str}")
+                    
+                    # Add queue information
+                    queue_users = []
                     if listing.get('queued_items'):
-                        individual_listing.append("📦 **Item:**")
-                        if listing['item'].lower() == "all items":
-                            # Show queued items for "All Items" listings
-                            for item_name, user_ids in listing['queued_items'].items():
-                                user_mentions = [f"<@{uid}>" for uid in user_ids]
-                                item_line = f"> **{item_name}** – **Queue:** {' • '.join(user_mentions)}"
-                                individual_listing.append(item_line)
-                        else:
-                            # Show queue for specific item
-                            user_mentions = [f"<@{uid}>" for uid in listing['queued_items'].get(listing['item'], [])]
-                            item_line = f"> **{listing['item']}"
-                            if listing['quantity'] > 1:
-                                item_line += f" ×{listing['quantity']}"
-                            item_line += "**"
-                            if user_mentions:
-                                item_line += f" – **Queue:** {' • '.join(user_mentions)}"
-                            individual_listing.append(item_line)
-                    else:
-                        item_line = f"📦 **Item:** {listing['item']}"
-                        if listing['quantity'] > 1:
-                            item_line += f" ×{listing['quantity']}"
-                        individual_listing.append(item_line)
-
+                        # Get users queued for this specific item
+                        queue_users = listing['queued_items'].get(listing['item'], [])
+                    
+                    if queue_users:
+                        user_mentions = [f"<@{uid}>" for uid in queue_users]
+                        queue_line = f"> 👥 **Queue:** {' • '.join(user_mentions)}"
+                        individual_listing.append(queue_line)
+                    
                     if listing.get('notes'):
-                        individual_listing.append(f"📝 **Notes:** {listing['notes']}")
+                        individual_listing.append(f"> 📝 **Notes:** {listing['notes']}")
 
                     # Add reputation if available
                     if listing.get('reputation_avg') and float(listing['reputation_avg']) > 0:
                         rep_stars = "⭐" * min(5, int(float(listing['reputation_avg'])))
-                        individual_listing.append(f"{rep_stars} {float(listing['reputation_avg']):.1f}")
+                        individual_listing.append(f"> {rep_stars} {float(listing['reputation_avg']):.1f}")
 
                     # Join this listing's lines and add to all listings
                     all_listings_text.append("\n".join(individual_listing))

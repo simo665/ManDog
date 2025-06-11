@@ -335,19 +335,20 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Get all available items (both specific items and from "All Items" listings)
-            from config.ffxi_data import get_zone_subcategories, get_subcategory_items
-            
+            # Get all available items from actual listings
             all_items = []
-            subcategories = get_zone_subcategories(self.zone)
-            for subcat in subcategories:
-                items = get_subcategory_items(self.zone, subcat)
-                all_items.extend(items)
-
+            
             # Add specific items from listings
             for listing in wts_listings:
                 if listing['item'].lower() != "all items":
                     all_items.append(listing['item'])
+
+            # Add items from zone configuration as backup
+            from config.ffxi_data import get_zone_subcategories, get_subcategory_items
+            subcategories = get_zone_subcategories(self.zone)
+            for subcat in subcategories:
+                items = get_subcategory_items(self.zone, subcat)
+                all_items.extend(items)
 
             # Remove duplicates and "All Items"
             unique_items = []
@@ -448,12 +449,12 @@ class ItemSelectView(discord.ui.View):
         self.zone = zone
         self.subcategory = subcategory
 
-        # Create dropdown with items (ensure unique values)
+        # Create dropdown with items (ensure unique values, exclude "All Items")
         unique_items = []
         seen_values = set()
 
         for item in items[:25]:  # Discord limit of 25 options
-            if item not in seen_values:
+            if item not in seen_values and item.lower() != "all items":
                 unique_items.append(item)
                 seen_values.add(item)
 
