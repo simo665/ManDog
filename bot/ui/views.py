@@ -1,3 +1,4 @@
+
 from datetime import datetime, timezone
 from config.ffxi_data import ZONE_DATA
 # Import ordering views
@@ -11,7 +12,6 @@ from typing import Optional, List, Dict, Any
 import logging
 from bot.ui.modals import ListingModal, QuantityNotesModal
 from bot.ui.embeds import MarketplaceEmbeds
-from config.ffxi_data import get_zone_subcategories, get_subcategory_items
 import asyncio
 
 logger = logging.getLogger(__name__)
@@ -68,12 +68,14 @@ class MarketplaceView(discord.ui.View):
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
         
-        # Add queue button for WTS embeds only
+        # Add queue buttons for WTS embeds only
         if listing_type.upper() == "WTS":
             self.join_queue_button.custom_id = f"marketplace_queue_{listing_type}_{zone}"
+            self.leave_queue_button.custom_id = f"marketplace_leave_queue_{listing_type}_{zone}"
         else:
-            # Remove queue button for WTB embeds
+            # Remove queue buttons for WTB embeds
             self.remove_item(self.join_queue_button)
+            self.remove_item(self.leave_queue_button)
 
     @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary, row=0)
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -93,9 +95,7 @@ class MarketplaceView(discord.ui.View):
         """Handle next page button."""
         try:
             # Get current listings to check if there's a next page
-            listings = await self.bot.db_manager.get_zone_listings(
-                interaction.guild.id, self.listing_type, self.zone
-            )
+            listings = await self.get_listings_with_queues(interaction.guild.id)
             max_pages = max(1, (len(listings) + 9) // 10)  # 10 items per page
 
             if self.current_page < max_pages - 1:
@@ -116,6 +116,103 @@ class MarketplaceView(discord.ui.View):
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle remove listing button."""
         await self.show_remove_options(interaction)
+
+    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.secondary, emoji="⏱️", row=2)
+    async def join_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle join queue button for WTS listings."""
+        try:
+            # Only show queue button for WTS listings
+            if self.listing_type.upper() != "WTS":
+                await interaction.response.send_message(
+                    "❌ Queue feature is only available for WTS (Want to Sell) listings.",
+                    ephemeral=True
+                )
+                return
+
+            # Get all available items from the items database for this zone
+            available_items = await self.bot.db_manager.get_all_items_by_zone(self.zone)
+
+            if not available_items:
+                await interaction.response.send_message(
+                    f"❌ No items available for {self.zone.title()}.",
+                    ephemeral=True
+                )
+                return
+
+            # Check if there are too many items for a dropdown (Discord limit is 25)
+            if len(available_items) > 25:
+                # Use search modal instead
+                from bot.ui.modals import QueueSearchModal
+                modal = QueueSearchModal(self.bot, self.zone)
+                await interaction.response.send_modal(modal)
+            else:
+                # Use dropdown
+                from bot.ui.modals import QueueSelectView
+                view = QueueSelectView(self.bot, [], self.zone, available_items)
+                
+                embed = discord.Embed(
+                    title="🔥 Join Queue",
+                    description=f"Select an item to queue for in {self.zone.title()}:",
+                    color=0xFF6B6B
+                )
+
+                await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error opening queue selection: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while opening the queue selection.",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
+    @discord.ui.button(label="Leave Queue", style=discord.ButtonStyle.danger, emoji="❌", row=2)
+    async def leave_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle leave queue button for WTS listings."""
+        try:
+            # Get user's current queue entries for this zone
+            user_queues = await self.bot.db_manager.execute_query(
+                """
+                SELECT lq.listing_id, lq.item_name, l.user_id as seller_id
+                FROM listing_queues lq
+                JOIN listings l ON lq.listing_id = l.id
+                WHERE lq.user_id = $1 AND l.zone = $2 AND l.active = TRUE
+                """,
+                interaction.user.id, self.zone
+            )
+
+            if not user_queues:
+                await interaction.response.send_message(
+                    f"❌ You are not queued for any items in {self.zone.title()}.",
+                    ephemeral=True
+                )
+                return
+
+            # Create dropdown for leaving queues
+            from bot.ui.modals import LeaveQueueView
+            view = LeaveQueueView(self.bot, user_queues, self.zone)
+            
+            embed = discord.Embed(
+                title="❌ Leave Queue",
+                description=f"Select which queue you want to leave in {self.zone.title()}:",
+                color=0xFF4444
+            )
+
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error opening leave queue selection: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while opening the leave queue selection.",
+                        ephemeral=True
+                    )
+            except:
+                pass
 
     async def safe_defer(self, interaction: discord.Interaction):
         """Safely defer an interaction."""
@@ -162,22 +259,22 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Get subcategories for this zone
-            subcategories = get_zone_subcategories(self.zone)
+            # Get monsters for this zone from database
+            monsters = await self.bot.db_manager.get_monsters_by_zone(self.zone)
 
-            if not subcategories:
+            if not monsters:
                 await interaction.response.send_message(
-                    f"❌ No subcategories configured for {self.zone}",
+                    f"❌ No monsters configured for {self.zone}",
                     ephemeral=True
                 )
                 return
 
-            # Create dropdown for subcategory selection
-            view = SubcategorySelectView(self.bot, self.listing_type, self.zone, subcategories)
+            # Create dropdown for monster selection
+            view = MonsterSelectView(self.bot, self.listing_type, self.zone, monsters)
 
             embed = discord.Embed(
-                title=f"📂 Select Subcategory",
-                description=f"Choose a subcategory for your {self.listing_type} entry in {self.zone.title()}:",
+                title=f"📂 Select Monster",
+                description=f"Choose a monster for your {self.listing_type} entry in {self.zone.title()}:",
                 color=self.embeds.COLORS['primary']
             )
 
@@ -201,13 +298,25 @@ class MarketplaceView(discord.ui.View):
             except:
                 pass
 
+    async def get_listings_with_queues(self, guild_id: int):
+        """Get listings with their queue data."""
+        listings = await self.bot.db_manager.get_zone_listings(
+            guild_id, self.listing_type, self.zone
+        )
+        
+        # Add queue data to each listing
+        for listing in listings:
+            if self.listing_type.upper() == "WTS":
+                queues = await self.bot.db_manager.get_listing_queues(listing['id'])
+                listing['queues'] = queues
+        
+        return listings
+
     async def update_embed(self, interaction: discord.Interaction):
         """Update the marketplace embed with current page."""
         try:
-            # Get current listings
-            listings = await self.bot.db_manager.get_zone_listings(
-                interaction.guild.id, self.listing_type, self.zone
-            )
+            # Get current listings with queue data
+            listings = await self.get_listings_with_queues(interaction.guild.id)
 
             # Create updated embed
             embed = self.embeds.create_marketplace_embed(
@@ -304,136 +413,112 @@ class MarketplaceView(discord.ui.View):
             except:
                 pass
 
-    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.secondary, emoji="⏱️", row=1)
-    async def join_queue_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle join queue button for WTS listings."""
+    async def refresh_marketplace_embed(self, interaction: discord.Interaction):
+        """Refresh the marketplace embed in the channel."""
         try:
-            # Only show queue button for WTS listings
-            if self.listing_type.upper() != "WTS":
-                await interaction.response.send_message(
-                    "❌ Queue feature is only available for WTS (Want to Sell) listings.",
-                    ephemeral=True
-                )
-                return
-
-            # Get all active WTS listings in current zone
-            wts_listings = await self.bot.db_manager.execute_query(
-                """
-                SELECT id, user_id, item, scheduled_time, notes 
-                FROM listings 
-                WHERE guild_id = $1 AND listing_type = 'WTS' AND zone = $2 
-                AND active = TRUE
-                ORDER BY created_at ASC
-                """,
-                interaction.guild.id, self.zone
+            # Get the specific marketplace channel for this listing type and zone
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT channel_id, message_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = $2 AND zone = $3",
+                interaction.guild.id, self.listing_type, self.zone
             )
 
-            if not wts_listings:
-                await interaction.response.send_message(
-                    f"❌ No WTS listings found in {self.zone.title()} to queue for.",
-                    ephemeral=True
-                )
+            if not channel_info:
+                logger.warning(f"No marketplace channel found for {self.listing_type} in {self.zone}")
                 return
 
-            # Get all available items from actual listings
-            all_items = []
-            
-            # Add specific items from listings
-            for listing in wts_listings:
-                if listing['item'].lower() != "all items":
-                    all_items.append(listing['item'])
+            channel_data = channel_info[0]
+            channel = interaction.guild.get_channel(channel_data['channel_id'])
 
-            # Add items from zone configuration as backup
-            from config.ffxi_data import get_zone_subcategories, get_subcategory_items
-            subcategories = get_zone_subcategories(self.zone)
-            for subcat in subcategories:
-                items = get_subcategory_items(self.zone, subcat)
-                all_items.extend(items)
-
-            # Remove duplicates and "All Items"
-            unique_items = []
-            seen = set()
-            for item in all_items:
-                if item.lower() != "all items" and item not in seen:
-                    unique_items.append(item)
-                    seen.add(item)
-
-            if not unique_items:
-                await interaction.response.send_message(
-                    f"❌ No items available for {self.zone.title()}.",
-                    ephemeral=True
-                )
+            if not channel:
+                logger.warning(f"Channel {channel_data['channel_id']} not found")
                 return
 
-            # Import here to avoid circular imports
-            from bot.ui.modals import QueueSelectView
+            # Get updated listings with queue data
+            listings = await self.get_listings_with_queues(interaction.guild.id)
 
-            view = QueueSelectView(self.bot, wts_listings, self.zone, unique_items)
-            
-            embed = discord.Embed(
-                title="🔥 Join Queue",
-                description=f"Select an item to queue for in {self.zone.title()}:",
-                color=0xFF6B6B
+            # Create updated embed
+            embeds = MarketplaceEmbeds()
+            embed = embeds.create_marketplace_embed(
+                self.listing_type, self.zone, listings, 0  # Reset to first page
             )
 
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            # Create new view
+            view = MarketplaceView(self.bot, self.listing_type, self.zone, 0)
+
+            # Try to find and update the marketplace message
+            message_id = channel_data.get('message_id')
+            if message_id:
+                try:
+                    message = await channel.fetch_message(message_id)
+                    await message.edit(embed=embed, view=view)
+                    return
+                except discord.NotFound:
+                    logger.warning(f"Marketplace message {message_id} not found")
+
+            # If message_id doesn't work, search for the message
+            async for message in channel.history(limit=50):
+                if (message.author == self.bot.user and 
+                    message.embeds and 
+                    message.embeds[0].title and 
+                    self.listing_type.upper() in message.embeds[0].title and
+                    self.zone.lower() in message.embeds[0].title.lower()):
+                    await message.edit(embed=embed, view=view)
+
+                    # Update the stored message_id
+                    await self.bot.db_manager.execute_command(
+                        "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                        message.id, channel.id
+                    )
+                    break
 
         except Exception as e:
-            logger.error(f"Error opening queue selection: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "❌ An error occurred while opening the queue selection.",
-                        ephemeral=True
-                    )
-            except:
-                pass
+            logger.error(f"Error refreshing marketplace embed: {e}")
 
-class SubcategorySelectView(discord.ui.View):
-    """View for selecting subcategory."""
+class MonsterSelectView(discord.ui.View):
+    """View for selecting monster/source."""
 
-    def __init__(self, bot, listing_type: str, zone: str, subcategories: List[str]):
+    def __init__(self, bot, listing_type: str, zone: str, monsters: List[str]):
         super().__init__(timeout=300)
         self.bot = bot
         self.listing_type = listing_type
         self.zone = zone
 
-        # Create dropdown with subcategories
+        # Create dropdown with monsters
         options = [
-            discord.SelectOption(label=subcat, value=subcat)
-            for subcat in subcategories
+            discord.SelectOption(label=monster, value=monster)
+            for monster in monsters[:25]  # Discord limit
         ]
 
-        self.subcategory_select.options = options
+        self.monster_select.options = options
 
-    @discord.ui.select(placeholder="Choose a subcategory...")
-    async def subcategory_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        """Handle subcategory selection."""
+    @discord.ui.select(placeholder="Choose a monster/source...")
+    async def monster_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle monster selection."""
         try:
-            subcategory = select.values[0]
+            monster = select.values[0]
 
-            # Get items for this subcategory
-            items = get_subcategory_items(self.zone, subcategory)
+            # Get items for this monster
+            items = await self.bot.db_manager.get_items_by_monster(self.zone, monster)
 
             if not items:
                 await interaction.response.send_message(
-                    f"❌ No items configured for {subcategory}",
+                    f"❌ No items configured for {monster}",
                     ephemeral=True
                 )
                 return
 
             # Show item selection
-            view = ItemSelectView(self.bot, self.listing_type, self.zone, subcategory, items)
+            view = ItemSelectView(self.bot, self.listing_type, self.zone, monster, items)
 
             embed = discord.Embed(
                 title=f"🎯 Select Item",
-                description=f"Choose an item (or 'All Items') for **{subcategory}**:",
+                description=f"Choose an item from **{monster}**:",
                 color=0x1E40AF
             )
 
             await interaction.response.edit_message(embed=embed, view=view)
         except Exception as e:
-            logger.error(f"Error in subcategory select: {e}")
+            logger.error(f"Error in monster select: {e}")
             try:
                 await interaction.response.send_message("❌ An error occurred", ephemeral=True)
             except:
@@ -442,25 +527,17 @@ class SubcategorySelectView(discord.ui.View):
 class ItemSelectView(discord.ui.View):
     """View for selecting specific item."""
 
-    def __init__(self, bot, listing_type: str, zone: str, subcategory: str, items: List[str]):
+    def __init__(self, bot, listing_type: str, zone: str, monster: str, items: List[str]):
         super().__init__(timeout=300)
         self.bot = bot
         self.listing_type = listing_type
         self.zone = zone
-        self.subcategory = subcategory
+        self.monster = monster
 
-        # Create dropdown with items (ensure unique values, exclude "All Items")
-        unique_items = []
-        seen_values = set()
-
-        for item in items[:25]:  # Discord limit of 25 options
-            if item not in seen_values and item.lower() != "all items":
-                unique_items.append(item)
-                seen_values.add(item)
-
+        # Create dropdown with items
         options = [
             discord.SelectOption(label=item, value=item)
-            for item in unique_items
+            for item in items[:25]  # Discord limit of 25 options
         ]
 
         self.item_select.options = options
@@ -471,11 +548,31 @@ class ItemSelectView(discord.ui.View):
         try:
             item = select.values[0]
 
+            # Check if this is a WTB listing and there are existing WTS listings for this item
+            if self.listing_type.upper() == "WTB":
+                sellers = await self.bot.db_manager.get_sellers_for_item(
+                    interaction.guild.id, self.zone, item
+                )
+                
+                if sellers:
+                    # Show seller selection for joining queue
+                    from bot.ui.modals import SellerJoinView
+                    view = SellerJoinView(self.bot, sellers, self.zone, item)
+                    
+                    embed = discord.Embed(
+                        title="🔗 Sellers Found",
+                        description=f"Some sellers are already offering **{item}**. Do you want to join their queue?",
+                        color=0x3B82F6
+                    )
+                    
+                    await interaction.response.edit_message(embed=embed, view=view)
+                    return
+
             # Create listing data for next step
             listing_data = {
                 'listing_type': self.listing_type,
                 'zone': self.zone,
-                'subcategory': self.subcategory,
+                'subcategory': self.monster,
                 'item': item
             }
 
@@ -576,9 +673,8 @@ class RemoveListingView(discord.ui.View):
                 return
 
             # Get updated listings
-            listings = await self.bot.db_manager.get_zone_listings(
-                interaction.guild.id, self.listing_type, self.zone
-            )
+            view = MarketplaceView(self.bot, self.listing_type, self.zone, 0)
+            listings = await view.get_listings_with_queues(interaction.guild.id)
 
             # Create updated embed
             embeds = MarketplaceEmbeds()
@@ -587,14 +683,14 @@ class RemoveListingView(discord.ui.View):
             )
 
             # Create new view
-            view = MarketplaceView(self.bot, self.listing_type, self.zone, 0)
+            new_view = MarketplaceView(self.bot, self.listing_type, self.zone, 0)
 
             # Try to find and update the marketplace message
             message_id = channel_data.get('message_id')
             if message_id:
                 try:
                     message = await channel.fetch_message(message_id)
-                    await message.edit(embed=embed, view=view)
+                    await message.edit(embed=embed, view=new_view)
                     return
                 except discord.NotFound:
                     logger.warning(f"Marketplace message {message_id} not found")
@@ -606,7 +702,7 @@ class RemoveListingView(discord.ui.View):
                     message.embeds[0].title and 
                     self.listing_type.upper() in message.embeds[0].title and
                     self.zone.lower() in message.embeds[0].title.lower()):
-                    await message.edit(embed=embed, view=view)
+                    await message.edit(embed=embed, view=new_view)
 
                     # Update the stored message_id
                     await self.bot.db_manager.execute_command(

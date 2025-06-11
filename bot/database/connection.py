@@ -579,6 +579,116 @@ class DatabaseManager:
             logger.error(f"Error getting listing queues: {e}")
             return {}
 
+    async def remove_from_queue_by_item(self, user_id: int, listing_id: int, item_name: str) -> bool:
+        """Remove a user from queue for a specific item."""
+        try:
+            await self.execute_command(
+                """
+                DELETE FROM listing_queues 
+                WHERE user_id = $1 AND listing_id = $2 AND item_name = $3
+                """,
+                user_id, listing_id, item_name
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error removing from queue: {e}")
+            return False
+
+    async def get_zone_items(self, zone: str) -> List[Dict[str, Any]]:
+        """Get all items for a specific zone from the items table."""
+        try:
+            query = """
+                SELECT DISTINCT monster_name, item_name 
+                FROM items 
+                WHERE zone = $1 
+                ORDER BY monster_name, item_name
+            """
+            return await self.execute_query(query, zone)
+        except Exception as e:
+            logger.error(f"Error getting zone items: {e}")
+            return []
+
+    async def get_all_items_by_zone(self, zone: str) -> List[str]:
+        """Get all item names for a specific zone."""
+        try:
+            query = """
+                SELECT DISTINCT item_name 
+                FROM items 
+                WHERE zone = $1 
+                ORDER BY item_name
+            """
+            results = await self.execute_query(query, zone)
+            return [row['item_name'] for row in results]
+        except Exception as e:
+            logger.error(f"Error getting all items by zone: {e}")
+            return []
+
+    async def get_monsters_by_zone(self, zone: str) -> List[str]:
+        """Get all monster names for a specific zone."""
+        try:
+            query = """
+                SELECT DISTINCT monster_name 
+                FROM items 
+                WHERE zone = $1 
+                ORDER BY monster_name
+            """
+            results = await self.execute_query(query, zone)
+            return [row['monster_name'] for row in results]
+        except Exception as e:
+            logger.error(f"Error getting monsters by zone: {e}")
+            return []
+
+    async def get_items_by_monster(self, zone: str, monster_name: str) -> List[str]:
+        """Get all items for a specific monster in a zone."""
+        try:
+            query = """
+                SELECT item_name 
+                FROM items 
+                WHERE zone = $1 AND monster_name = $2 
+                ORDER BY item_name
+            """
+            results = await self.execute_query(query, zone, monster_name)
+            return [row['item_name'] for row in results]
+        except Exception as e:
+            logger.error(f"Error getting items by monster: {e}")
+            return []
+
+    async def search_items(self, zone: str, search_term: str) -> List[Dict[str, Any]]:
+        """Search for items by name in a specific zone."""
+        try:
+            query = """
+                SELECT monster_name, item_name 
+                FROM items 
+                WHERE zone = $1 AND item_name ILIKE $2 
+                ORDER BY item_name
+                LIMIT 25
+            """
+            return await self.execute_query(query, zone, f'%{search_term}%')
+        except Exception as e:
+            logger.error(f"Error searching items: {e}")
+            return []
+
+    async def get_sellers_for_item(self, guild_id: int, zone: str, item_name: str) -> List[Dict[str, Any]]:
+        """Get all sellers offering a specific item in a zone."""
+        try:
+            query = """
+                SELECT l.id, l.user_id, l.scheduled_time, l.notes, u.username
+                FROM listings l
+                LEFT JOIN users u ON l.user_id = u.user_id
+                WHERE l.guild_id = $1 
+                  AND l.zone = $2 
+                  AND l.item = $3 
+                  AND l.listing_type = 'WTS'
+                  AND l.active = TRUE 
+                  AND l.expires_at > $4
+                ORDER BY l.scheduled_time ASC
+            """
+            current_time = datetime.now(timezone.utc)
+            return await self.execute_query(query, guild_id, zone, item_name, current_time)
+        except Exception as e:
+            logger.error(f"Error getting sellers for item: {e}")
+            return []
+
     async def cleanup_guild_data(self, guild_id: int):
         """Clean up all data for a guild."""
         try:

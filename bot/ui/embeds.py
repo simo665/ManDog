@@ -1,269 +1,236 @@
-"""
-Embed creation utilities for the marketplace bot.
-"""
-
 import discord
-import logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+import logging
 
 logger = logging.getLogger(__name__)
 
 class MarketplaceEmbeds:
-    """Utility class for creating Discord embeds."""
+    """Creates Discord embeds for marketplace functionality."""
 
-    # FFXI-themed colors
     COLORS = {
-        'primary': 0x1E40AF,      # Blue
-        'success': 0x059669,      # Green
-        'warning': 0xD97706,      # Orange
-        'error': 0xDC2626,        # Red
-        'info': 0x7C3AED,         # Purple
-        'wts': 0xF59E0B,          # Amber for WTS
-        'wtb': 0x3B82F6           # Blue for WTB
+        'primary': 0x1E40AF,
+        'secondary': 0x6B7280,
+        'success': 0x10B981,
+        'warning': 0xF59E0B,
+        'error': 0xEF4444,
+        'wts': 0xF59E0B,
+        'wtb': 0x3B82F6,
+        'neutral': 0x6B7280
     }
 
     def create_setup_embed(self) -> discord.Embed:
-        """Create the initial setup embed."""
+        """Create the setup embed for marketplace initialization."""
         embed = discord.Embed(
-            title="🏪 Mandok Marketplace Setup",
-            description=(
-                "Welcome to the Mandok marketplace system for Final Fantasy XI!\n\n"
-                "This bot will help you manage player-driven trading with:\n"
-                "• **WTS/WTB Categories** - Organized by content zones\n"
-                "• **Interactive Listings** - UI-driven with buttons and dropdowns\n"
-                "• **Reputation System** - Build trust in the community\n"
-                "• **Auto-Expiry** - Keep listings fresh and relevant\n\n"
-                "Click the button below to set up the marketplace channels."
-            ),
-            color=self.COLORS['primary'],
-            timestamp=datetime.now(timezone.utc)
+            title="🏗️ Marketplace Setup",
+            description="Click the button below to set up marketplace channels for your server.",
+            color=self.COLORS['primary']
         )
 
         embed.add_field(
-            name="📋 What will be created:",
-            value=(
-                "• **WTS - Sellers** category with 5 channels\n"
-                "• **WTB - Buyers** category with 5 channels\n"
-                "• Channels: Sky, Sea, Dynamis, Limbus, Others\n"
-                "• Interactive embeds in each channel"
-            ),
+            name="What happens when you set up?",
+            value="• Creates WTS and WTB categories\n• Sets up channels for each zone\n• Configures persistent marketplace messages",
             inline=False
         )
 
-        embed.set_footer(text="Mandok Marketplace Bot", icon_url="https://cdn.discordapp.com/embed/avatars/0.png")
+        embed.set_footer(text="This will create channels and categories in your server")
         return embed
 
     def create_admin_embed(self) -> discord.Embed:
-        """Create admin control panel embed."""
+        """Create admin panel embed."""
         embed = discord.Embed(
-            title="⚙️ Marketplace Administration",
-            description="Administrative controls for the marketplace system.",
-            color=self.COLORS['info'],
-            timestamp=datetime.now(timezone.utc)
+            title="⚙️ Marketplace Admin Panel",
+            description="Marketplace management options for administrators.",
+            color=self.COLORS['secondary']
         )
 
         embed.add_field(
-            name="📊 Available Commands",
-            value=(
-                "• `/marketplace setup:True` - Initialize marketplace\n"
-                "• View active listings and manage content\n"
-                "• Monitor user reputation scores\n"
-                "• Moderate marketplace activity"
-            ),
+            name="Available Commands",
+            value="• Setup marketplace channels\n• View marketplace statistics\n• Manage listings and users",
             inline=False
-        )
-
-        return embed
-
-    def create_setup_success_embed(self, channel_count: int) -> discord.Embed:
-        """Create success message after setup."""
-        embed = discord.Embed(
-            title="✅ Marketplace Setup Complete!",
-            description=(
-                f"Successfully created {channel_count} marketplace channels.\n\n"
-                "The marketplace is now ready for use. Users can create listings "
-                "by clicking the buttons in each channel."
-            ),
-            color=self.COLORS['success'],
-            timestamp=datetime.now(timezone.utc)
         )
 
         return embed
 
     def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]], page: int = 0) -> discord.Embed:
-        """Create the main marketplace embed for a channel with pagination."""
-        # Ensure we always use the correct title and color based on the provided listing_type
-        title_emoji = "🔸" if listing_type.upper() == "WTS" else "🔹"
-        color = self.COLORS['wts'] if listing_type.upper() == "WTS" else self.COLORS['wtb']
+        """Create the main marketplace embed with queue information."""
+        try:
+            # Calculate pagination
+            items_per_page = 10
+            start_idx = page * items_per_page
+            end_idx = start_idx + items_per_page
+            paginated_listings = listings[start_idx:end_idx]
 
-        # Calculate pagination
-        items_per_page = 10
-        total_pages = max(1, (len(listings) + items_per_page - 1) // items_per_page)
-        page = max(0, min(page, total_pages - 1))
-        start_idx = page * items_per_page
-        end_idx = start_idx + items_per_page
-        page_listings = listings[start_idx:end_idx]
+            # Determine color and emoji
+            color = self.COLORS['wts'] if listing_type.upper() == 'WTS' else self.COLORS['wtb']
+            emoji = "🔸" if listing_type.upper() == 'WTS' else "🔹"
 
-        page_info = f" (Page {page + 1}/{total_pages})" if total_pages > 1 else ""
+            # Count total items
+            total_items = len(listings)
+
+            # Create embed title
+            title = f"{emoji} {listing_type.upper()} - {zone.title()}"
+
+            embed = discord.Embed(
+                title=title,
+                description=f"📂 {zone.title()} ({total_items} item{'s' if total_items != 1 else ''})",
+                color=color,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            if not paginated_listings:
+                embed.add_field(
+                    name="No listings",
+                    value=f"No active {listing_type} listings in {zone.title()}",
+                    inline=False
+                )
+            else:
+                # Group listings by user and display them with queue information
+                for listing in paginated_listings:
+                    user_id = listing['user_id']
+                    item = listing['item']
+                    scheduled_time = listing.get('scheduled_time')
+                    notes = listing.get('notes', '')
+                    listing_id = listing['id']
+
+                    # Format the scheduled time using Discord timestamp
+                    time_str = "Not scheduled"
+                    if scheduled_time:
+                        timestamp = int(scheduled_time.timestamp())
+                        time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
+
+                    # Start building the listing display
+                    listing_text = f"> 📦 **Item:**\n>  ╰┈➤ **{item}** by <@{user_id}>\n> ⏰ **Time:** {time_str}"
+
+                    # Add queue information if it's a WTS listing
+                    if listing_type.upper() == 'WTS':
+                        # Get queue data for this listing (this would need to be passed from the calling function)
+                        # For now, we'll assume it's available in the listing data
+                        queues = listing.get('queues', {})
+                        if queues and item in queues:
+                            queue_users = queues[item]
+                            if queue_users:
+                                queue_mentions = ' • '.join([f"<@{user_id}>" for user_id in queue_users])
+                                listing_text += f"\n> 👥 **Queue:** {queue_mentions}"
+
+                    if notes:
+                        listing_text += f"\n> 📝 **Notes:** {notes}"
+
+                    embed.add_field(
+                        name=f"📂 {zone.title()} (1 item)",
+                        value=listing_text,
+                        inline=False
+                    )
+
+            # Add pagination info if needed
+            total_pages = max(1, (total_items + items_per_page - 1) // items_per_page)
+            if total_pages > 1:
+                embed.set_footer(text=f"Page {page + 1} of {total_pages}")
+
+            return embed
+
+        except Exception as e:
+            logger.error(f"Error creating marketplace embed: {e}")
+            # Return a basic error embed
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Failed to load marketplace data",
+                color=self.COLORS['error']
+            )
+            return embed
+
+    def create_listing_confirmation_embed(self, listing_data: Dict[str, Any]) -> discord.Embed:
+        """Create confirmation embed for new listing."""
+        color = self.COLORS['wts'] if listing_data['listing_type'] == 'WTS' else self.COLORS['wtb']
+        emoji = "🔸" if listing_data['listing_type'] == 'WTS' else "🔹"
 
         embed = discord.Embed(
-            title=f"{title_emoji} {listing_type} - {zone.title()}{page_info}",
-            description=f"Active {listing_type} listings for {zone} content",
-            color=color,
-            timestamp=datetime.now(timezone.utc)
+            title=f"{emoji} Listing Created",
+            description=f"Your {listing_data['listing_type']} listing has been created successfully!",
+            color=color
         )
 
-        if not listings:
+        embed.add_field(name="Zone", value=listing_data['zone'].title(), inline=True)
+        embed.add_field(name="Item", value=listing_data['item'], inline=True)
+        embed.add_field(name="Quantity", value=str(listing_data.get('quantity', 1)), inline=True)
+
+        if listing_data.get('scheduled_time'):
+            timestamp = int(listing_data['scheduled_time'].timestamp())
             embed.add_field(
-                name="📝 No Active Listings",
-                value=f"No {listing_type} listings currently available for {zone}.\nBe the first to create one!",
+                name="Scheduled Time", 
+                value=f"<t:{timestamp}:f> (<t:{timestamp}:R>)", 
                 inline=False
             )
-        elif not page_listings:
+
+        if listing_data.get('notes'):
+            embed.add_field(name="Notes", value=listing_data['notes'], inline=False)
+
+        embed.set_footer(text="Your listing will appear in the marketplace channel")
+        return embed
+
+    def create_queue_embed(self, zone: str, items: List[str]) -> discord.Embed:
+        """Create embed for queue selection."""
+        embed = discord.Embed(
+            title="🔥 Join Queue",
+            description=f"Select an item to queue for in {zone.title()}:",
+            color=0xFF6B6B
+        )
+
+        if not items:
             embed.add_field(
-                name="📝 No Listings on This Page",
-                value="Use the navigation buttons to browse other pages.",
+                name="No Items Available",
+                value=f"No items are currently listed for sale in {zone.title()}",
                 inline=False
             )
         else:
-            # Group listings by subcategory, with additional validation
-            grouped = {}
-            for listing in page_listings:
-                # Skip listings that don't match the expected listing type
-                if listing.get('listing_type', '').upper() != listing_type.upper():
-                    logger.warning(f"Skipping mismatched listing in embed: expected {listing_type}, got {listing.get('listing_type')}")
-                    continue
+            items_text = "\n".join([f"• {item}" for item in items[:10]])  # Show first 10
+            if len(items) > 10:
+                items_text += f"\n... and {len(items) - 10} more"
 
-                subcat = listing.get('subcategory', 'Other')
-                if subcat not in grouped:
-                    grouped[subcat] = []
-                grouped[subcat].append(listing)
-
-            # Add fields for each subcategory
-            for subcat, subcat_listings in grouped.items():
-                all_listings_text = []
-                
-                for listing in subcat_listings:
-                    # Format listing with user info
-                    user_mention = f"<@{listing['user_id']}>"
-                    time_str = listing.get('scheduled_time').strftime("%B %d – %I%p").replace(" 0", " ").replace("AM", "AM").replace("PM", "PM") if listing.get('scheduled_time') else "Unknown"
-
-                    # Build individual listing text with new format
-                    individual_listing = []
-                    individual_listing.append(f"> 📦 **Item:**")
-                    
-                    # Handle items and queues with new format
-                    item_name = listing['item']
-                    if listing['quantity'] > 1:
-                        item_name += f" ×{listing['quantity']}"
-                    
-                    item_line = f">  ╰┈➤ **{item_name}** by {user_mention}"
-                    individual_listing.append(item_line)
-                    
-                    individual_listing.append(f"> ⏰ **Time:** {time_str}")
-                    
-                    # Add queue information
-                    queue_users = []
-                    if listing.get('queued_items'):
-                        # Get users queued for this specific item
-                        queue_users = listing['queued_items'].get(listing['item'], [])
-                    
-                    if queue_users:
-                        user_mentions = [f"<@{uid}>" for uid in queue_users]
-                        queue_line = f"> 👥 **Queue:** {' • '.join(user_mentions)}"
-                        individual_listing.append(queue_line)
-                    
-                    if listing.get('notes'):
-                        individual_listing.append(f"> 📝 **Notes:** {listing['notes']}")
-
-                    # Add reputation if available
-                    if listing.get('reputation_avg') and float(listing['reputation_avg']) > 0:
-                        rep_stars = "⭐" * min(5, int(float(listing['reputation_avg'])))
-                        individual_listing.append(f"> {rep_stars} {float(listing['reputation_avg']):.1f}")
-
-                    # Join this listing's lines and add to all listings
-                    all_listings_text.append("\n".join(individual_listing))
-
-                # Create the field with all listings for this subcategory
-                embed.add_field(
-                    name=f"📂 {subcat} ({len(subcat_listings)} {'item' if len(subcat_listings) == 1 else 'items'})",
-                    value="\n\n".join(all_listings_text) if all_listings_text else "No listings",
-                    inline=False
-                )
-
-        footer_text = f"Use the buttons below to manage your {listing_type} listings"
-        if total_pages > 1:
-            footer_text += f" • Page {page + 1} of {total_pages}"
-
-        embed.set_footer(
-            text=footer_text,
-            icon_url="https://cdn.discordapp.com/embed/avatars/0.png"
-        )
+            embed.add_field(
+                name="Available Items",
+                value=items_text,
+                inline=False
+            )
 
         return embed
 
-    def create_listing_confirmation_embed(self, listing_type: str, item: str, scheduled_time: datetime) -> discord.Embed:
-        """Create confirmation embed for new listing."""
+    def create_notification_embed(self, listing_data: Dict[str, Any], queue_users: List[int]) -> discord.Embed:
+        """Create notification embed for scheduled trade time."""
         embed = discord.Embed(
-            title="✅ Listing Created Successfully!",
-            description=f"Your {listing_type} entry for **{item}** has been added to the marketplace.",
-            color=self.COLORS['success'],
-            timestamp=datetime.now(timezone.utc)
+            title="⏰ Trade Time Notification",
+            description="It's time for your scheduled trade!",
+            color=self.COLORS['warning']
         )
 
-        embed.add_field(
-            name="📅 Scheduled Time",
-            value=f"<t:{int(scheduled_time.timestamp())}:F>",
-            inline=True
-        )
+        embed.add_field(name="Item", value=listing_data['item'], inline=True)
+        embed.add_field(name="Zone", value=listing_data['zone'].title(), inline=True)
+        embed.add_field(name="Seller", value=f"<@{listing_data['user_id']}>", inline=True)
 
-        embed.add_field(
-            name="⏰ Expires In",
-            value="14 days (with reminders)",
-            inline=True
-        )
+        if queue_users:
+            queue_mentions = ', '.join([f"<@{user_id}>" for user_id in queue_users])
+            embed.add_field(name="Queued Buyers", value=queue_mentions, inline=False)
 
+        embed.set_footer(text="Please coordinate your trade in-game")
         return embed
 
-    def create_error_embed(self, message: str) -> discord.Embed:
-        """Create error embed."""
+    def create_rating_embed(self, listing_data: Dict[str, Any]) -> discord.Embed:
+        """Create rating embed for post-trade feedback."""
         embed = discord.Embed(
-            title="❌ Error",
-            description=message,
-            color=self.COLORS['error'],
-            timestamp=datetime.now(timezone.utc)
+            title="⭐ Rate Your Trade Experience",
+            description="Please rate your trading experience with this seller:",
+            color=self.COLORS['primary']
         )
 
-        return embed
-
-    def create_reputation_embed(self, user: discord.User, reputation_data: Dict[str, Any]) -> discord.Embed:
-        """Create reputation display embed."""
-        embed = discord.Embed(
-            title=f"⭐ Reputation - {user.display_name}",
-            color=self.COLORS['info'],
-            timestamp=datetime.now(timezone.utc)
-        )
-
-        embed.set_thumbnail(url=user.display_avatar.url)
-
-        avg_rating = reputation_data.get('average_rating', 0)
-        total_ratings = reputation_data.get('total_ratings', 0)
-        activity_score = reputation_data.get('activity_score', 0)
-
-        # Star display
-        stars = "⭐" * int(avg_rating) + "☆" * (5 - int(avg_rating))
+        embed.add_field(name="Item", value=listing_data['item'], inline=True)
+        embed.add_field(name="Zone", value=listing_data['zone'].title(), inline=True)
+        embed.add_field(name="Seller", value=f"<@{listing_data['user_id']}>", inline=True)
 
         embed.add_field(
-            name="📊 Overall Rating",
-            value=f"{stars} ({avg_rating:.1f}/5.0)\nBased on {total_ratings} ratings",
-            inline=True
+            name="Rating Scale",
+            value="⭐ 1 - Poor\n⭐⭐ 2 - Fair\n⭐⭐⭐ 3 - Good\n⭐⭐⭐⭐ 4 - Very Good\n⭐⭐⭐⭐⭐ 5 - Excellent",
+            inline=False
         )
 
-        embed.add_field(
-            name="📈 Activity Score",
-            value=f"{activity_score} points",
-            inline=True
-        )
-
+        embed.set_footer(text="Your rating helps build trust in the community")
         return embed

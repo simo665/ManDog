@@ -1,3 +1,4 @@
+
 """Database migration utilities."""
 
 import logging
@@ -78,6 +79,7 @@ class MigrationManager:
             5: self.add_ratings_table,
             6: self.add_guild_rating_configs,
             7: self.add_listing_queues_table,
+            8: self.add_items_table,
         }
 
     async def migration_001_initial_schema(self):
@@ -170,6 +172,129 @@ class MigrationManager:
         """)
         
         logger.info("Listing queues table and index created successfully")
+
+    async def add_items_table(self):
+        """Add items table for marketplace items."""
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS items (
+                id SERIAL PRIMARY KEY,
+                zone TEXT NOT NULL,
+                monster_name TEXT NOT NULL,
+                item_name TEXT NOT NULL,
+                added_by TEXT DEFAULT 'Simo',
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_items_zone ON items(zone)
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_items_monster ON items(monster_name)
+        """)
+        
+        # Populate with initial data
+        await self.populate_items_table()
+        
+        logger.info("Items table created and populated successfully")
+
+    async def populate_items_table(self):
+        """Populate items table with initial marketplace data."""
+        items_data = [
+            # Sky items
+            ('sky', 'Kirin', 'Shining Cloth'),
+            ('sky', 'Kirin', 'Kirin\'s Osode'),
+            ('sky', 'Kirin', 'Kirin\'s Pole'),
+            ('sky', 'Suzaku', 'Suzaku\'s Sune-ate'),
+            ('sky', 'Suzaku', 'Crimson Blade'),
+            ('sky', 'Suzaku', 'Peacock Charm'),
+            ('sky', 'Seiryu', 'Seiryu\'s Kote'),
+            ('sky', 'Seiryu', 'Cobalt Blade'),
+            ('sky', 'Seiryu', 'Peacock Amulet'),
+            ('sky', 'Genbu', 'Genbu\'s Shield'),
+            ('sky', 'Genbu', 'Speed Belt'),
+            ('sky', 'Byakko', 'Byakko\'s Haidate'),
+            ('sky', 'Byakko', 'Justice Badge'),
+            ('sky', 'All Sky Gods', 'Shura Zunari Kabuto'),
+            ('sky', 'All Sky Gods', 'Shura Haidate'),
+            ('sky', 'All Sky Gods', 'Shura Togi'),
+            ('sky', 'All Sky Gods', 'Haubergeon'),
+            ('sky', 'All Sky Gods', 'Hope Torque'),
+            ('sky', 'All Sky Gods', 'Faith Torque'),
+            ('sky', 'All Sky Gods', 'Fortitude Torque'),
+            
+            # Sea items
+            ('sea', 'Jailer of Hope', 'Hope Torque'),
+            ('sea', 'Jailer of Hope', 'Novio Earring'),
+            ('sea', 'Jailer of Hope', 'Brutal Earring'),
+            ('sea', 'Jailer of Justice', 'Suppanomimi'),
+            ('sea', 'Jailer of Justice', 'Ethereal Earring'),
+            ('sea', 'Jailer of Faith', 'Faith Torque'),
+            ('sea', 'Jailer of Faith', 'Magnetic Earring'),
+            ('sea', 'Jailer of Faith', 'Hollow Earring'),
+            ('sea', 'Jailer of Fortitude', 'Fortitude Torque'),
+            ('sea', 'Jailer of Fortitude', 'Infernal Earring'),
+            ('sea', 'Jailer of Fortitude', 'Coral Earring'),
+            ('sea', 'Absolute Virtue', 'Virtue Stone'),
+            
+            # Dynamis items
+            ('dynamis', 'Dynamis - Bastok', 'Hydra Corps'),
+            ('dynamis', 'Dynamis - Bastok', 'Hydra Salade'),
+            ('dynamis', 'Dynamis - San d\'Oria', 'Temple Crown'),
+            ('dynamis', 'Dynamis - San d\'Oria', 'Temple Cyclas'),
+            ('dynamis', 'Dynamis - Windurst', 'Sorcerer\'s Petasos'),
+            ('dynamis', 'Dynamis - Windurst', 'Sorcerer\'s Coat'),
+            ('dynamis', 'Dynamis - Jeuno', 'Apocalypse'),
+            ('dynamis', 'Dynamis - Jeuno', 'Ragnarok'),
+            ('dynamis', 'Dynamis - Jeuno', 'Redemption'),
+            ('dynamis', 'Currency', '100 Byne Bills'),
+            ('dynamis', 'Currency', '1 Montiont Silverpiece'),
+            ('dynamis', 'Currency', '1 Ranperre\'s Goldpiece'),
+            ('dynamis', 'Currency', '1 Lungo-Nango Jadeshell'),
+            
+            # Limbus items
+            ('limbus', 'Temenos', 'Homam Zucchetto'),
+            ('limbus', 'Temenos', 'Homam Corazza'),
+            ('limbus', 'Temenos', 'Homam Manopolas'),
+            ('limbus', 'Temenos', 'Homam Cosciales'),
+            ('limbus', 'Temenos', 'Homam Gambieras'),
+            ('limbus', 'Apollyon', 'Nashira Turban'),
+            ('limbus', 'Apollyon', 'Nashira Manteel'),
+            ('limbus', 'Apollyon', 'Nashira Gages'),
+            ('limbus', 'Apollyon', 'Nashira Seraweels'),
+            ('limbus', 'Apollyon', 'Nashira Crackows'),
+            ('limbus', 'Omega', 'Omega\'s Eye'),
+            ('limbus', 'Ultima', 'Ultima\'s Cerebrum'),
+            ('limbus', 'Currency', 'Ancient Beastcoin'),
+            
+            # Others items
+            ('others', 'Einherjar', 'Gleipnir'),
+            ('others', 'Einherjar', 'Gungnir'),
+            ('others', 'Einherjar', 'Defending Ring'),
+            ('others', 'Einherjar', 'Amanomurakumo'),
+            ('others', 'Salvage', 'Usukane Gear'),
+            ('others', 'Salvage', 'Serafim Gear'),
+            ('others', 'Salvage', 'Morrigan Gear'),
+            ('others', 'Salvage', 'Skadi Gear'),
+            ('others', 'Salvage', '35 Piece'),
+            ('others', 'Salvage', '15 Piece'),
+            ('others', 'Salvage', 'Alexandrite'),
+            ('others', 'HNMs', 'Ridill'),
+            ('others', 'HNMs', 'Kraken Club'),
+            ('others', 'HNMs', 'Herald\'s Gaiters'),
+            ('others', 'HNMs', 'Crimson Cuisses'),
+            ('others', 'Crafting', 'Damascus Ingot'),
+            ('others', 'Crafting', 'Wootz Ore'),
+            ('others', 'Crafting', 'Voidstone'),
+            ('others', 'Crafting', 'Dragon Heart'),
+        ]
+        
+        for zone, monster, item in items_data:
+            await self.db_manager.execute_command(
+                "INSERT INTO items (zone, monster_name, item_name) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                zone, monster, item
+            )
 
 async def create_reputation_tables(db_manager):
     """Create reputation system tables."""
