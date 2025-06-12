@@ -193,34 +193,23 @@ class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
                 user_timezone = await self.bot.db_manager.get_user_timezone(interaction.user.id)
 
                 if not user_timezone:
-                    # User hasn't set timezone, require them to set it
-                    embed = discord.Embed(
-                        title="🌍 Timezone Required",
-                        description="You must set your timezone before creating WTS listings with schedules.",
-                        color=0xFF6B6B
-                    )
-
-                    view = discord.ui.View()
-                    timezone_button = discord.ui.Button(label="Set Timezone", style=discord.ButtonStyle.primary)
-
-                    async def timezone_callback(tz_interaction):
-                        modal = TimezoneModal(self.bot)
-                        await tz_interaction.response.send_modal(modal)
-
-                    timezone_button.callback = timezone_callback
-                    view.add_item(timezone_button)
-
-                    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                    # Show timezone modal first
+                    from bot.ui.modals import TimezoneModal
+                    modal = TimezoneModal(self.bot, {
+                        **self.listing_data,
+                        'quantity': quantity_val,
+                        'notes': self.notes.value
+                    })
+                    await interaction.response.send_modal(modal)
                     return
 
-                # Show datetime selection
-                listing_data_with_details = {
+                # Show scheduling view
+                from bot.ui.views import DateTimeSelectView
+                view = DateTimeSelectView(self.bot, {
                     **self.listing_data,
                     'quantity': quantity_val,
                     'notes': self.notes.value
-                }
-
-                view = DateTimeSelectView(self.bot, listing_data_with_details, user_timezone)
+                }, user_timezone)
 
                 embed = discord.Embed(
                     title="📅 Schedule Required",
@@ -325,18 +314,23 @@ class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
 class QueueSelectView(discord.ui.View):
     """View for selecting items to queue for."""
 
-    def __init__(self, bot, wts_listings: List[Dict[str, Any]], zone: str, available_items: List[str]):
+    def __init__(self, bot, current_listings: List[Dict[str, Any]], zone: str, available_items: List[str]):
         super().__init__(timeout=300)
         self.bot = bot
-        self.wts_listings = wts_listings
         self.zone = zone
+        self.current_listings = current_listings
 
-        # Create dropdown with available items (max 25)
+        # Create options from available items
         options = []
-        for item in available_items[:25]:
+        for item in available_items[:25]:  # Discord limit
             options.append(discord.SelectOption(label=item, value=item))
 
-        self.item_select.options = options
+        # Ensure we have at least one option
+        if options:
+            self.item_select.options = options
+        else:
+            # Fallback option
+            self.item_select.options = [discord.SelectOption(label="No items available", value="none", description="No items found for this zone")]
 
     @discord.ui.select(placeholder="Select an item to queue for...")
     async def item_select(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -689,26 +683,25 @@ class LeaveQueueView(discord.ui.View):
         self.bot = bot
         self.zone = zone
 
-        # Create dropdown with user's queue entries
+        # Create options from user's queues
         options = []
         for queue in user_queues[:25]:  # Discord limit
-            label = f"Leave queue for: {queue['item_name']}"
-            if len(label) > 100:
-                label = label[:97] + "..."
+            label = queue['item_name']
+            value = f"{queue['listing_id']}_{queue['item_name']}"
+            options.append(discord.SelectOption(label=label, value=value))
 
-            options.append(discord.SelectOption(
-                label=label,
-                value=f"{queue['listing_id']}|{queue['item_name']}",
-                description=f"Seller: User {queue['seller_id']}"
-            ))
-
-        self.queue_select.options = options
+        # Ensure we have at least one option
+        if options:
+            self.queue_select.options = options
+        else:
+            # Fallback option
+            self.queue_select.options = [discord.SelectOption(label="No queues found", value="none", description="No active queues")]
 
     @discord.ui.select(placeholder="Select a queue to leave...")
     async def queue_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         """Handle queue leave selection."""
         try:
-            value_parts = select.values[0].split('|')
+            value_parts = select.values[0].split('_')
             listing_id = int(value_parts[0])
             item_name = value_parts[1]
 
@@ -1086,6 +1079,234 @@ class DateTimeSelectView(discord.ui.View):
                             await message.edit(embed=embed, view=new_view)
                         except discord.NotFound:
                             logger.warning(f"Message {message_id} not found")
+
+        except Exception as e:
+            logger.error(f"Error refreshing marketplace embed: {e}")
+
+class SchedulingView(discord.ui.View):
+    """View for scheduling WTS listings."""
+
+    def __init__(self, bot, listing_data: Dict[str, Any]):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.listing_data = listing_data
+
+        # Create date options (next 7 days)
+        today = datetime.now(timezone.utc)
+        date_options = []
+        for i in range(7):
+            date = today + timedelta(days=i)
+            label = date.strftime("%A, %B %d")
+            value = date.strftime("%Y-%m-%d")
+            date_options.append(discord.SelectOption(label=label, value=value))
+
+        # Ensure we have at least one option
+        if date_options:
+            self.date_select.options = date_options
+        else:
+            # Fallback option
+            self.date_select.options = [discord.SelectOption(label="Today", value=today.strftime("%Y-%m-%d"))]
+
+        # Create hour options (24-hour format)
+        hour_options = []
+        for hour in range(24):
+            label = f"{hour:02d}:00"
+            hour_options.append(discord.SelectOption(label=label, value=str(hour)))
+
+        # Ensure we have options (this should always be 24, but safety check)
+        if hour_options:
+            self.hour_select.options = hour_options
+        else:
+            # Fallback option
+            self.hour_select.options = [discord.SelectOption(label="12:00", value="12")]
+
+    @discord.ui.select(placeholder="Select a date")
+    async def date_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle date selection."""
+        pass
+
+    @discord.ui.select(placeholder="Select an hour")
+    async def hour_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle hour selection."""
+        pass
+
+    @discord.ui.button(label="Confirm Schedule", style=discord.ButtonStyle.primary)
+    async def confirm_schedule(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Confirm schedule and create listing."""
+        try:
+            # Get selected date and hour
+            selected_date = self.date_select.values[0]
+            selected_hour = int(self.hour_select.values[0])
+
+            # Combine date and hour into a datetime object
+            scheduled_datetime = datetime.strptime(f"{selected_date} {selected_hour:02d}:00", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+
+            # Create listing in database
+            listing_id = await self.bot.db_manager.create_listing(
+                user_id=interaction.user.id,
+                guild_id=interaction.guild.id,
+                listing_type=self.listing_data['listing_type'],
+                zone=self.listing_data['zone'],
+                subcategory=self.listing_data['subcategory'],
+                item=self.listing_data['item'],
+                quantity=self.listing_data['quantity'],
+                notes=self.listing_data['notes'],
+                scheduled_time=scheduled_datetime
+            )
+
+            if listing_id:
+                # Create confirmation embed
+                from bot.ui.embeds import MarketplaceEmbeds
+                embeds = MarketplaceEmbeds()
+
+                listing_data = {
+                    **self.listing_data,
+                    'scheduled_time': scheduled_datetime
+                }
+
+                embed = embeds.create_listing_confirmation_embed(listing_data)
+
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+
+                # Refresh marketplace embed
+                asyncio.create_task(self.refresh_marketplace_embed(interaction))
+            else:
+                await interaction.response.send_message(
+                    "❌ Failed to create listing. Please try again.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error confirming schedule: {e}")
+            await interaction.response.send_message(
+                "❌ Error creating scheduled listing. Please try again.",
+                ephemeral=True
+            )
+
+    async def refresh_marketplace_embed(self, interaction: discord.Interaction):
+        """Refresh the marketplace embed after creating a listing."""
+        try:
+            from bot.ui.views import MarketplaceView
+
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT channel_id, message_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = $2 AND zone = $3",
+                interaction.guild.id, self.listing_data['listing_type'], self.listing_data['zone']
+            )
+
+            if channel_info:
+                channel_data = channel_info[0]
+                channel = interaction.guild.get_channel(channel_data['channel_id'])
+
+                if channel:
+                    view = MarketplaceView(self.bot, self.listing_data['listing_type'], self.listing_data['zone'], 0)
+                    listings = await view.get_listings_with_queues(interaction.guild.id)
+
+                    from bot.ui.embeds import MarketplaceEmbeds
+                    embeds = MarketplaceEmbeds()
+                    embed = embeds.create_marketplace_embed(
+                        self.listing_data['listing_type'], self.listing_data['zone'], listings, 0
+                    )
+
+                    new_view = MarketplaceView(self.bot, self.listing_data['listing_type'], self.listing_data['zone'], 0)
+
+                    message_id = channel_data.get('message_id')
+                    if message_id:
+                        try:
+                            message = await channel.fetch_message(message_id)
+                            await message.edit(embed=embed, view=new_view)
+                        except discord.NotFound:
+                            logger.warning(f"Message {message_id} not found")
+
+        except Exception as e:
+            logger.error(f"Error refreshing marketplace embed: {e}")
+class LeaveQueueView(discord.ui.View):
+    """View for leaving queues."""
+
+    def __init__(self, bot, user_queues: List[Dict[str, Any]], zone: str):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.zone = zone
+
+        # Create options from user's queues
+        options = []
+        for queue in user_queues[:25]:  # Discord limit
+            label = queue['item_name']
+            value = f"{queue['listing_id']}|{queue['item_name']}"
+            options.append(discord.SelectOption(label=label, value=value))
+
+        # Ensure we have at least one option
+        if options:
+            self.queue_select.options = options
+        else:
+            # Fallback option
+            self.queue_select.options = [discord.SelectOption(label="No queues found", value="none", description="No active queues")]
+
+    @discord.ui.select(placeholder="Select a queue to leave...")
+    async def queue_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle queue leave selection."""
+        try:
+            value_parts = select.values[0].split('|')
+            listing_id = int(value_parts[0])
+            item_name = value_parts[1]
+
+            success = await self.bot.db_manager.remove_from_queue_by_item(
+                interaction.user.id, listing_id, item_name
+            )
+
+            if success:
+                await interaction.response.send_message(
+                    f"✅ You have left the queue for **{item_name}**",
+                    ephemeral=True
+                )
+                # Refresh the marketplace embed
+                asyncio.create_task(self.refresh_marketplace_embed(interaction))
+            else:
+                await interaction.response.send_message(
+                    "❌ Could not remove you from the queue.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error leaving queue: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while leaving the queue",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
+    async def refresh_marketplace_embed(self, interaction: discord.Interaction):
+        """Refresh marketplace embed after queue change."""
+        try:
+            from bot.ui.views import MarketplaceView
+
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT channel_id, message_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = 'WTS' AND zone = $2",
+                interaction.guild.id, self.zone
+            )
+
+            if channel_info:
+                channel_data = channel_info[0]
+                channel = interaction.guild.get_channel(channel_data['channel_id'])
+
+                if channel:
+                    view = MarketplaceView(self.bot, 'WTS', self.zone, 0)
+                    listings = await view.get_listings_with_queues(interaction.guild.id)
+
+                    from bot.ui.embeds import MarketplaceEmbeds
+                    embeds = MarketplaceEmbeds()
+                    embed = embeds.create_marketplace_embed('WTS', self.zone, listings, 0)
+                    new_view = MarketplaceView(self.bot, 'WTS', self.zone, 0)
+
+                    message_id = channel_data.get('message_id')
+                    if message_id:
+                        try:
+                            message = await channel.fetch_message(message_id)
+                            await message.edit(embed=embed, view=new_view)
+                        except discord.NotFound:
+                            pass
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
