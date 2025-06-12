@@ -1,3 +1,4 @@
+
 """Database migration utilities."""
 
 import logging
@@ -165,12 +166,12 @@ class MigrationManager:
                 UNIQUE(listing_id, user_id, item_name)
             )
         """)
-
+        
         await self.db_manager.execute_command("""
             CREATE INDEX IF NOT EXISTS idx_listing_queues_listing_id
             ON listing_queues(listing_id)
         """)
-
+        
         logger.info("Listing queues table and index created successfully")
 
     async def add_items_table(self):
@@ -185,18 +186,18 @@ class MigrationManager:
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """)
-
+        
         await self.db_manager.execute_command("""
             CREATE INDEX IF NOT EXISTS idx_items_zone ON items(zone)
         """)
-
+        
         await self.db_manager.execute_command("""
             CREATE INDEX IF NOT EXISTS idx_items_monster ON items(monster_name)
         """)
-
+        
         # Populate with initial data
         await self.populate_items_table()
-
+        
         logger.info("Items table created and populated successfully")
 
     async def add_scheduled_events_table(self):
@@ -206,51 +207,22 @@ class MigrationManager:
                 id SERIAL PRIMARY KEY,
                 listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
                 event_time TIMESTAMPTZ NOT NULL,
-                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'triggered', 'cancelled')),
-                event_type VARCHAR(50) DEFAULT 'listing_event',
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'cancelled')),
+                event_type VARCHAR(50) DEFAULT 'listing_reminder',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 processed_at TIMESTAMPTZ
             )
         """)
-
+        
         await self.db_manager.execute_command("""
             CREATE INDEX IF NOT EXISTS idx_scheduled_events_time ON scheduled_events(event_time)
         """)
-
+        
         await self.db_manager.execute_command("""
             CREATE INDEX IF NOT EXISTS idx_scheduled_events_status ON scheduled_events(status)
         """)
-
-        # Add event confirmations table
-        await self.db_manager.execute_command("""
-            CREATE TABLE IF NOT EXISTS event_confirmations (
-                id SERIAL PRIMARY KEY,
-                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
-                user_id BIGINT NOT NULL,
-                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'declined')),
-                confirmed_at TIMESTAMPTZ,
-                rating_time TIMESTAMPTZ,
-                rating_sent BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE(listing_id, user_id)
-            )
-        """)
-
-        # Add seller ratings table
-        await self.db_manager.execute_command("""
-            CREATE TABLE IF NOT EXISTS seller_ratings (
-                id SERIAL PRIMARY KEY,
-                seller_id BIGINT NOT NULL,
-                rater_id BIGINT NOT NULL,
-                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
-                rating INTEGER CHECK (rating >= 1 AND rating <= 5),
-                comment TEXT,
-                created_at TIMESTAMPTZ DEFAULT NOW(),
-                UNIQUE(seller_id, rater_id, listing_id)
-            )
-        """)
-
-        logger.info("Scheduled events and confirmation tables created successfully")
+        
+        logger.info("Scheduled events table created successfully")
 
     async def populate_items_table(self):
         """Populate items table with initial marketplace data."""
@@ -276,7 +248,7 @@ class MigrationManager:
             ('sky', 'All Sky Gods', 'Hope Torque'),
             ('sky', 'All Sky Gods', 'Faith Torque'),
             ('sky', 'All Sky Gods', 'Fortitude Torque'),
-
+            
             # Sea items
             ('sea', 'Jailer of Hope', 'Hope Torque'),
             ('sea', 'Jailer of Hope', 'Novio Earring'),
@@ -290,7 +262,7 @@ class MigrationManager:
             ('sea', 'Jailer of Fortitude', 'Infernal Earring'),
             ('sea', 'Jailer of Fortitude', 'Coral Earring'),
             ('sea', 'Absolute Virtue', 'Virtue Stone'),
-
+            
             # Dynamis items
             ('dynamis', 'Dynamis - Bastok', 'Hydra Corps'),
             ('dynamis', 'Dynamis - Bastok', 'Hydra Salade'),
@@ -305,7 +277,7 @@ class MigrationManager:
             ('dynamis', 'Currency', '1 Montiont Silverpiece'),
             ('dynamis', 'Currency', '1 Ranperre\'s Goldpiece'),
             ('dynamis', 'Currency', '1 Lungo-Nango Jadeshell'),
-
+            
             # Limbus items
             ('limbus', 'Temenos', 'Homam Zucchetto'),
             ('limbus', 'Temenos', 'Homam Corazza'),
@@ -320,7 +292,7 @@ class MigrationManager:
             ('limbus', 'Omega', 'Omega\'s Eye'),
             ('limbus', 'Ultima', 'Ultima\'s Cerebrum'),
             ('limbus', 'Currency', 'Ancient Beastcoin'),
-
+            
             # Others items
             ('others', 'Einherjar', 'Gleipnir'),
             ('others', 'Einherjar', 'Gungnir'),
@@ -342,7 +314,7 @@ class MigrationManager:
             ('others', 'Crafting', 'Voidstone'),
             ('others', 'Crafting', 'Dragon Heart'),
         ]
-
+        
         for zone, monster, item in items_data:
             await self.db_manager.execute_command(
                 "INSERT INTO items (zone, monster_name, item_name) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",

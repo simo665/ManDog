@@ -1,3 +1,4 @@
+
 from datetime import datetime, timezone
 from config.ffxi_data import ZONE_DATA
 # Import ordering views
@@ -12,8 +13,6 @@ import logging
 from bot.ui.modals import ListingModal, QuantityNotesModal
 from bot.ui.embeds import MarketplaceEmbeds
 import asyncio
-from bot.utils.logger import logger
-from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ class MarketplaceView(discord.ui.View):
         # Customize button labels based on type
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
-
+        
         # Add queue buttons for WTS embeds only
         if listing_type.upper() == "WTS":
             self.join_queue_button.custom_id = f"marketplace_queue_{listing_type}_{zone}"
@@ -150,7 +149,7 @@ class MarketplaceView(discord.ui.View):
                 # Use dropdown
                 from bot.ui.modals import QueueSelectView
                 view = QueueSelectView(self.bot, [], self.zone, available_items)
-
+                
                 embed = discord.Embed(
                     title="🔥 Join Queue",
                     description=f"Select an item to queue for in {self.zone.title()}:",
@@ -195,7 +194,7 @@ class MarketplaceView(discord.ui.View):
             # Create dropdown for leaving queues
             from bot.ui.modals import LeaveQueueView
             view = LeaveQueueView(self.bot, user_queues, self.zone)
-
+            
             embed = discord.Embed(
                 title="❌ Leave Queue",
                 description=f"Select which queue you want to leave in {self.zone.title()}:",
@@ -304,13 +303,13 @@ class MarketplaceView(discord.ui.View):
         listings = await self.bot.db_manager.get_zone_listings(
             guild_id, self.listing_type, self.zone
         )
-
+        
         # Add queue data to each listing
         for listing in listings:
             if self.listing_type.upper() == "WTS":
                 queues = await self.bot.db_manager.get_listing_queues(listing['id'])
                 listing['queues'] = queues
-
+        
         return listings
 
     async def update_embed(self, interaction: discord.Interaction):
@@ -554,18 +553,18 @@ class ItemSelectView(discord.ui.View):
                 sellers = await self.bot.db_manager.get_sellers_for_item(
                     interaction.guild.id, self.zone, item
                 )
-
+                
                 if sellers:
                     # Show seller selection for joining queue
                     from bot.ui.modals import SellerJoinView
                     view = SellerJoinView(self.bot, sellers, self.zone, item)
-
+                    
                     embed = discord.Embed(
                         title="🔗 Sellers Found",
                         description=f"Some sellers are already offering **{item}**. Do you want to join their queue?",
                         color=0x3B82F6
                     )
-
+                    
                     await interaction.response.edit_message(embed=embed, view=view)
                     return
 
@@ -714,76 +713,3 @@ class RemoveListingView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while refreshing the marketplace", ephemeral=True)
-
-
-class EventConfirmationView(discord.ui.View):
-    def __init__(self, listing_id, item_name):
-        super().__init__(timeout=3600)  # 1 hour timeout
-        self.listing_id = listing_id
-        self.item_name = item_name
-
-    @discord.ui.button(label="✅ Confirm Participation", style=discord.ButtonStyle.green)
-    async def confirm_participation(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            from bot.database.connection import execute_query
-
-            # Record confirmation with 1-hour timer for rating
-            rating_time = datetime.now(timezone.utc) + timedelta(hours=1)
-
-            await execute_query("""
-                INSERT INTO event_confirmations (listing_id, user_id, status, confirmed_at, rating_time, rating_sent)
-                VALUES ($1, $2, 'confirmed', $3, $4, FALSE)
-                ON CONFLICT (listing_id, user_id) DO UPDATE SET 
-                status = 'confirmed', confirmed_at = $3, rating_time = $4
-            """, self.listing_id, interaction.user.id, datetime.now(timezone.utc), rating_time)
-
-            await interaction.response.send_message(f"✅ Participation confirmed for **{self.item_name}**. You'll receive a rating prompt in 1 hour.", ephemeral=True)
-
-        except Exception as e:
-            logger.error(f"Error confirming participation: {e}")
-            await interaction.response.send_message("❌ Error confirming participation.", ephemeral=True)
-
-
-class RatingView(discord.ui.View):
-    def __init__(self, listing_id, seller_id):
-        super().__init__(timeout=3600)
-        self.listing_id = listing_id
-        self.seller_id = seller_id
-
-    @discord.ui.button(label="⭐", style=discord.ButtonStyle.secondary, custom_id="rating_1")
-    async def rating_1(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._submit_rating(interaction, 1)
-
-    @discord.ui.button(label="⭐⭐", style=discord.ButtonStyle.secondary, custom_id="rating_2")
-    async def rating_2(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._submit_rating(interaction, 2)
-
-    @discord.ui.button(label="⭐⭐⭐", style=discord.ButtonStyle.secondary, custom_id="rating_3")
-    async def rating_3(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._submit_rating(interaction, 3)
-
-    @discord.ui.button(label="⭐⭐⭐⭐", style=discord.ButtonStyle.secondary, custom_id="rating_4")
-    async def rating_4(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._submit_rating(interaction, 4)
-
-    @discord.ui.button(label="⭐⭐⭐⭐⭐", style=discord.ButtonStyle.primary, custom_id="rating_5")
-    async def rating_5(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._submit_rating(interaction, 5)
-
-    async def _submit_rating(self, interaction: discord.Interaction, rating: int):
-        try:
-            from bot.database.connection import execute_query
-
-            # Save rating to seller's profile
-            await execute_query("""
-                INSERT INTO seller_ratings (seller_id, rater_id, listing_id, rating, created_at)
-                VALUES ($1, $2, $3, $4, $5)
-            """, self.seller_id, interaction.user.id, self.listing_id, rating, datetime.now(timezone.utc))
-
-            await interaction.response.send_message(f"✅ Thank you for rating! You gave {rating} star{'s' if rating != 1 else ''}.", ephemeral=True)
-
-        except Exception as e:
-            logger.error(f"Error submitting rating: {e}")
-            await interaction.response.send_message("❌ Error submitting rating.", ephemeral=True)
