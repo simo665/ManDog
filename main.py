@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from bot.client import MandokBot
 from bot.utils.logger import setup_logging
 from config.settings import BOT_TOKEN, DATABASE_URL
+import traceback
 
 def main():
     """Main entry point for the bot."""
@@ -29,11 +30,11 @@ def main():
 
     # Create and run the bot
     bot = MandokBot()
-
+    
     try:
         async def run_bot():
-            # Initialize database
-            await bot.db_manager.initialize()
+            # Call setup_hook to initialize db_manager
+            await bot.setup_hook() 
 
             # Initialize scheduler service
             from bot.services.scheduler import SchedulerService
@@ -48,7 +49,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Bot shutdown requested by user")
     except Exception as e:
-        logger.error(f"Fatal error: {e}")
+        logger.error(f"Fatal error: {traceback.format_exc()}")
     finally:
         logger.info("Bot shutdown complete")
 

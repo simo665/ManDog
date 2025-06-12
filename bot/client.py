@@ -1,7 +1,3 @@
-"""
-Main bot client class with event handlers and command registration.
-"""
-
 import logging
 import discord
 from discord.ext import commands, tasks
@@ -31,7 +27,6 @@ class MandokBot(commands.Bot):
     async def setup_hook(self):
         """Called when the bot is starting up."""
         logger.info("Setting up bot...")
-
         # Initialize database manager
         self.db_manager = DatabaseManager()
         await self.db_manager.initialize()
@@ -47,8 +42,12 @@ class MandokBot(commands.Bot):
         self.scheduler = ExpiryScheduler(self)
 
         # Add command cogs
-        await self.add_cog(MarketplaceCommands(self))
-
+        if 'MarketplaceCommands' not in self.cogs:
+            await self.add_cog(MarketplaceCommands(self))
+            logger.info("Added MarketplaceCommands cog")
+        else:
+            logger.warning("MarketplaceCommands cog already loaded.")
+            
         # Start background tasks
         self.expiry_check.start()
 

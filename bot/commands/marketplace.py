@@ -262,7 +262,7 @@ class MarketplaceCommands(commands.Cog):
             await interaction.response.send_message(
                 "❌ An error occurred while managing items.",
                 ephemeral=True
-            )t_error}")
+            )
 
     async def cleanup_invalid_channels(self, guild: discord.Guild):
         """Clean up database entries for channels that no longer exist."""
