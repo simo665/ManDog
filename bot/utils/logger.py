@@ -180,8 +180,6 @@ class ErrorReporter:
 
         # This could send immediate notifications to administrators
 
-logger.info("Scheduler service stopped")
-
     async def process_expired_events(self):
         """Process events that have reached their scheduled time"""
         try:
@@ -201,7 +199,7 @@ logger.info("Scheduler service stopped")
                 await self._process_single_event(event)
 
         except Exception as e:
-            logger.error(f"Error processing expir
+            logger.error(f"Error processing expire")
 
 # Create a default logger instance for module-level imports
 logger = logging.getLogger(__name__)
