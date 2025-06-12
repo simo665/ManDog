@@ -206,8 +206,8 @@ class MigrationManager:
                 id SERIAL PRIMARY KEY,
                 listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
                 event_time TIMESTAMPTZ NOT NULL,
-                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'cancelled')),
-                event_type VARCHAR(50) DEFAULT 'listing_reminder',
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'triggered', 'cancelled')),
+                event_type VARCHAR(50) DEFAULT 'listing_event',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 processed_at TIMESTAMPTZ
             )
@@ -221,7 +221,36 @@ class MigrationManager:
             CREATE INDEX IF NOT EXISTS idx_scheduled_events_status ON scheduled_events(status)
         """)
 
-        logger.info("Scheduled events table created successfully")
+        # Add event confirmations table
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS event_confirmations (
+                id SERIAL PRIMARY KEY,
+                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
+                user_id BIGINT NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'declined')),
+                confirmed_at TIMESTAMPTZ,
+                rating_time TIMESTAMPTZ,
+                rating_sent BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(listing_id, user_id)
+            )
+        """)
+
+        # Add seller ratings table
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS seller_ratings (
+                id SERIAL PRIMARY KEY,
+                seller_id BIGINT NOT NULL,
+                rater_id BIGINT NOT NULL,
+                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
+                rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                UNIQUE(seller_id, rater_id, listing_id)
+            )
+        """)
+
+        logger.info("Scheduled events and confirmation tables created successfully")
 
     async def populate_items_table(self):
         """Populate items table with initial marketplace data."""

@@ -303,14 +303,6 @@ from typing import Dict, Any, List
 import discord
 
 logger = logging.getLogger(__name__)
-
-async def fetch_all(query, *args):
-    """Placeholder for database fetch_all function."""
-    pass
-
-async def execute_query(query, *args):
-    """Placeholder for database execute_query function."""
-    pass
 class SchedulerService:
     """Service for handling scheduled events and notifications."""
 
@@ -335,8 +327,8 @@ class SchedulerService:
             current_time = datetime.now(timezone.utc)
 
             # Get expired events
-            expired_events = await fetch_all("""
-                SELECT se.*, l.user_id, l.item, l.zone, l.guild_id, l.channel_id
+            expired_events = await self.bot.db_manager.execute_query("""
+                SELECT se.*, l.user_id, l.item, l.zone, l.guild_id
                 FROM scheduled_events se
                 JOIN listings l ON se.listing_id = l.id
                 WHERE se.status = 'pending' 
@@ -344,8 +336,9 @@ class SchedulerService:
                   AND l.active = TRUE
             """, current_time)
 
-            for event in expired_events:
-                await self._process_single_event(event)
+            if expired_events:
+                for event in expired_events:
+                    await self._process_single_event(event)
 
         except Exception as e:
             logger.error(f"Error processing expired events: {e}")
@@ -354,13 +347,13 @@ class SchedulerService:
         """Process a single expired event"""
         try:
             # Step 1: Delete item from seller's listing (embed + database)
-            await execute_query(
+            await self.bot.db_manager.execute_command(
                 "UPDATE listings SET active = FALSE WHERE id = $1",
                 event['listing_id']
             )
 
             # Update event status
-            await execute_query(
+            await self.bot.db_manager.execute_command(
                 "UPDATE scheduled_events SET status = 'triggered' WHERE id = $1",
                 event['id']
             )
@@ -374,11 +367,9 @@ class SchedulerService:
     async def _send_event_notifications(self, event):
         """Send notifications to seller and buyers"""
         try:
-            from bot.client import bot
-
             # Get queued buyers
-            buyers = await fetch_all(
-                "SELECT user_id FROM queue WHERE listing_id = $1 AND status = 'active'",
+            buyers = await self.bot.db_manager.execute_query(
+                "SELECT user_id FROM listing_queues WHERE listing_id = $1",
                 event['listing_id']
             )
 
@@ -388,7 +379,7 @@ class SchedulerService:
 
             # Send to seller
             try:
-                seller = await bot.fetch_user(event['user_id'])
+                seller = await self.bot.fetch_user(event['user_id'])
                 await seller.send(
                     f"⏳ The event for **{event['item']}** has started. Please confirm your participation.",
                     view=confirmation_view
@@ -399,7 +390,7 @@ class SchedulerService:
             # Send to buyers
             for buyer in buyers:
                 try:
-                    user = await bot.fetch_user(buyer['user_id'])
+                    user = await self.bot.fetch_user(buyer['user_id'])
                     await user.send(
                         f"⏳ The event for **{event['item']}** has started. Please confirm your participation.",
                         view=confirmation_view
@@ -416,7 +407,7 @@ class SchedulerService:
             current_time = datetime.now(timezone.utc)
 
             # Get confirmations ready for rating (1 hour after confirmation)
-            ready_for_rating = await fetch_all("""
+            ready_for_rating = await self.bot.db_manager.execute_query("""
                 SELECT ec.*, l.user_id as seller_id, l.item
                 FROM event_confirmations ec
                 JOIN listings l ON ec.listing_id = l.id
@@ -425,8 +416,9 @@ class SchedulerService:
                   AND ec.rating_sent = FALSE
             """, current_time)
 
-            for confirmation in ready_for_rating:
-                await self._send_rating_prompt(confirmation)
+            if ready_for_rating:
+                for confirmation in ready_for_rating:
+                    await self._send_rating_prompt(confirmation)
 
         except Exception as e:
             logger.error(f"Error processing confirmations: {e}")
@@ -434,10 +426,9 @@ class SchedulerService:
     async def _send_rating_prompt(self, confirmation):
         """Send rating prompt to buyer"""
         try:
-            from bot.client import bot
             from bot.ui.views import RatingView
 
-            user = await bot.fetch_user(confirmation['user_id'])
+            user = await self.bot.fetch_user(confirmation['user_id'])
             rating_view = RatingView(confirmation['listing_id'], confirmation['seller_id'])
 
             await user.send(
@@ -446,7 +437,7 @@ class SchedulerService:
             )
 
             # Mark rating as sent
-            await execute_query(
+            await self.bot.db_manager.execute_command(
                 "UPDATE event_confirmations SET rating_sent = TRUE WHERE id = $1",
                 confirmation['id']
             )
