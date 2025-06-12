@@ -1,0 +1,65 @@
+🛠️ Strict Developer Instructions — Read Fully Before Modifying Anything
+
+DO NOT:
+- ❌ Do not change or refactor code that is already working correctly.
+- ❌ Do not add duplicate logic.
+- ❌ Do not add code comments unless requested.
+- ❌ Do not assume or guess functionality — follow existing logic.
+- ❌ Do not overwrite working database logic, embeds, or UI.
+
+✅ MANDATORY BEHAVIOR
+- Only fix broken features.
+- Respect existing codebase and structure.
+- Validate every change.
+- Maintain stability at all costs.
+- Test every fix before moving on to the next.
+
+✅ FIX ONLY THESE ISSUES:
+
+1. 🌍 Fix Timezone Saving & Usage
+
+- Issue: Timezone saving fails with error: "❌ Failed to save timezone. Please try again."
+- Likely Cause: Timezone is saved, but item creation doesn’t continue. Fix the flow logic.
+- ✅ Required Fixes:
+  - Use the IANA timezone database to validate input.
+  - Save the timezone to DB.
+  - After saving, automatically resume the item submission process. Do not abort.
+  - When user enters time, convert it using their timezone → UTC UNIX timestamp.
+
+2. 🕒 Add Custom Time (HH:MM)
+
+- Add a button: ⏱ Enter Custom Time (next to time dropdowns).
+- On button click:
+  - Open modal asking for input in format: "HH:MM" (24-hour).
+  - Validate input strictly with ^([01]\d|2[0-3]):([0-5]\d)$.
+  - Combine with selected date and user’s timezone to generate correct timestamp.
+  - Continue with submission using that timestamp.
+
+⚠️ Do not remove existing dropdowns. This is an extra option.
+
+3. ⏰ Event Trigger System
+
+Event Flow (must implement exactly as written):
+1. At the event time:
+   - ✅ Delete the item from seller’s listing (embed + database).
+2. ✅ Notify seller and queued buyers:  
+   "⏳ The event for [Item Name] has started. Please confirm your participation."
+3. ✅ When buyers confirm:
+   - Start 1-hour timer.
+4. ✅ After 1 hour:
+   - Send buyers a prompt to rate the seller (1-5 stars).
+   - Save rating in database under seller’s profile.
+5. ✅ Use DB to track:
+   - Confirmation
+   - Timer trigger
+   - Prevent duplicates or missed events
+
+⚠️ No time.sleep() or blocking loops — use timestamp comparisons or async background tasks.
+
+4. 📌 Developer Final Notes
+
+- Most of the code already exists — your job is to debug and connect it, not to rebuild it.
+- ✅ Read the entire project before editing.
+- ✅ Handle timezones using user's saved timezone.
+- ✅ All timestamp calculations must consider timezones correctly.
+- ❌ Do not add new logic if existing logic already does it correctly — just fix the flow or usage.
