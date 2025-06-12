@@ -714,10 +714,8 @@ class RemoveListingView(discord.ui.View):
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
-
-except Exception as e:
-            logger.error(f"Error updating marketplace embed: {e}")
-            await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ An error occurred while refreshing the marketplace", ephemeral=True)
 
 
 class EventConfirmationView(discord.ui.View):
