@@ -251,3 +251,31 @@ class MarketplaceEmbeds:
 
         embed.set_footer(text="Your rating helps build trust in the community")
         return embed
+
+    def create_setup_success_embed(self, channels_created: int) -> discord.Embed:
+        """Create success embed for marketplace setup."""
+        embed = discord.Embed(
+            title="✅ Marketplace Setup Complete",
+            description=f"Successfully created {channels_created} marketplace channels!",
+            color=self.COLORS['success']
+        )
+
+        embed.add_field(
+            name="What's Next?",
+            value="• Use the marketplace channels to create WTS/WTB listings\n• Set your timezone with `/settimezone`\n• Start trading!",
+            inline=False
+        )
+
+        embed.set_footer(text="Your marketplace is ready to use")
+        return embed
+
+    def create_error_embed(self, message: str) -> discord.Embed:
+        """Create error embed."""
+        embed = discord.Embed(
+            title="❌ Error",
+            description=message,
+            color=self.COLORS['error']
+        )
+
+        embed.set_footer(text="Please try again or contact an administrator")
+        return embed

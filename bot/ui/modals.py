@@ -126,7 +126,7 @@ class ListingModal(discord.ui.Modal, title="Create Listing"):
                 channel = interaction.guild.get_channel(channel_data['channel_id'])
 
                 if channel:
-                    # Get updated listings
+                    # Get updated listings with queue data
                     view = MarketplaceView(self.bot, self.listing_type, self.zone, 0)
                     listings = await view.get_listings_with_queues(interaction.guild.id)
 
@@ -146,11 +146,50 @@ class ListingModal(discord.ui.Modal, title="Create Listing"):
                         try:
                             message = await channel.fetch_message(message_id)
                             await message.edit(embed=embed, view=new_view)
+                            logger.info(f"Successfully refreshed marketplace embed with {len(listings)} listings")
                         except discord.NotFound:
-                            logger.warning(f"Message {message_id} not found")
+                            logger.warning(f"Message {message_id} not found, searching for message...")
+                            # If message not found by ID, search for it
+                            async for msg in channel.history(limit=50):
+                                if (msg.author == self.bot.user and 
+                                    msg.embeds and 
+                                    msg.embeds[0].title and 
+                                    self.listing_type.upper() in msg.embeds[0].title and
+                                    self.zone.lower() in msg.embeds[0].title.lower()):
+                                    await msg.edit(embed=embed, view=new_view)
+                                    # Update stored message ID
+                                    await self.bot.db_manager.execute_command(
+                                        "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                        msg.id, channel.id
+                                    )
+                                    logger.info(f"Found and updated marketplace message, new ID: {msg.id}")
+                                    break
+                    else:
+                        logger.warning(f"No message_id stored for channel {channel.id}, searching...")
+                        # No stored message ID, search for the message
+                        async for msg in channel.history(limit=50):
+                            if (msg.author == self.bot.user and 
+                                msg.embeds and 
+                                msg.embeds[0].title and 
+                                self.listing_type.upper() in msg.embeds[0].title and
+                                self.zone.lower() in msg.embeds[0].title.lower()):
+                                await msg.edit(embed=embed, view=new_view)
+                                # Store the message ID for future use
+                                await self.bot.db_manager.execute_command(
+                                    "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                    msg.id, channel.id
+                                )
+                                logger.info(f"Found and updated marketplace message, stored ID: {msg.id}")
+                                break
+                else:
+                    logger.warning(f"Channel {channel_data['channel_id']} not found")
+            else:
+                logger.warning(f"No channel info found for {self.listing_type} in {self.zone}")
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
     """Modal for quantity, notes, and scheduling."""
@@ -320,11 +359,50 @@ class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
                         try:
                             message = await channel.fetch_message(message_id)
                             await message.edit(embed=embed, view=new_view)
+                            logger.info(f"Successfully refreshed marketplace embed with {len(listings)} listings")
                         except discord.NotFound:
-                            logger.warning(f"Message {message_id} not found")
+                            logger.warning(f"Message {message_id} not found, searching for message...")
+                            # If message not found by ID, search for it
+                            async for msg in channel.history(limit=50):
+                                if (msg.author == self.bot.user and 
+                                    msg.embeds and 
+                                    msg.embeds[0].title and 
+                                    self.listing_data['listing_type'].upper() in msg.embeds[0].title and
+                                    self.listing_data['zone'].lower() in msg.embeds[0].title.lower()):
+                                    await msg.edit(embed=embed, view=new_view)
+                                    # Update stored message ID
+                                    await self.bot.db_manager.execute_command(
+                                        "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                        msg.id, channel.id
+                                    )
+                                    logger.info(f"Found and updated marketplace message, new ID: {msg.id}")
+                                    break
+                    else:
+                        logger.warning(f"No message_id stored for channel {channel.id}, searching...")
+                        # No stored message ID, search for the message
+                        async for msg in channel.history(limit=50):
+                            if (msg.author == self.bot.user and 
+                                msg.embeds and 
+                                msg.embeds[0].title and 
+                                self.listing_data['listing_type'].upper() in msg.embeds[0].title and
+                                self.listing_data['zone'].lower() in msg.embeds[0].title.lower()):
+                                await msg.edit(embed=embed, view=new_view)
+                                # Store the message ID for future use
+                                await self.bot.db_manager.execute_command(
+                                    "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                    msg.id, channel.id
+                                )
+                                logger.info(f"Found and updated marketplace message, stored ID: {msg.id}")
+                                break
+                else:
+                    logger.warning(f"Channel {channel_data['channel_id']} not found")
+            else:
+                logger.warning(f"No channel info found for {self.listing_data['listing_type']} in {self.listing_data['zone']}")
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 class QueueSelectView(discord.ui.View):
     """View for selecting items to queue for."""
@@ -1121,11 +1199,50 @@ class DateTimeSelectView(discord.ui.View):
                         try:
                             message = await channel.fetch_message(message_id)
                             await message.edit(embed=embed, view=new_view)
+                            logger.info(f"Successfully refreshed marketplace embed with {len(listings)} listings")
                         except discord.NotFound:
-                            logger.warning(f"Message {message_id} not found")
+                            logger.warning(f"Message {message_id} not found, searching for message...")
+                            # If message not found by ID, search for it
+                            async for msg in channel.history(limit=50):
+                                if (msg.author == self.bot.user and 
+                                    msg.embeds and 
+                                    msg.embeds[0].title and 
+                                    self.listing_data['listing_type'].upper() in msg.embeds[0].title and
+                                    self.listing_data['zone'].lower() in msg.embeds[0].title.lower()):
+                                    await msg.edit(embed=embed, view=new_view)
+                                    # Update stored message ID
+                                    await self.bot.db_manager.execute_command(
+                                        "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                        msg.id, channel.id
+                                    )
+                                    logger.info(f"Found and updated marketplace message, new ID: {msg.id}")
+                                    break
+                    else:
+                        logger.warning(f"No message_id stored for channel {channel.id}, searching...")
+                        # No stored message ID, search for the message
+                        async for msg in channel.history(limit=50):
+                            if (msg.author == self.bot.user and 
+                                msg.embeds and 
+                                msg.embeds[0].title and 
+                                self.listing_data['listing_type'].upper() in msg.embeds[0].title and
+                                self.listing_data['zone'].lower() in msg.embeds[0].title.lower()):
+                                await msg.edit(embed=embed, view=new_view)
+                                # Store the message ID for future use
+                                await self.bot.db_manager.execute_command(
+                                    "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                    msg.id, channel.id
+                                )
+                                logger.info(f"Found and updated marketplace message, stored ID: {msg.id}")
+                                break
+                else:
+                    logger.warning(f"Channel {channel_data['channel_id']} not found")
+            else:
+                logger.warning(f"No channel info found for {self.listing_data['listing_type']} in {self.listing_data['zone']}")
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
 class CustomTimeModal(discord.ui.Modal, title="Enter Custom Time"):
     """Modal for entering custom time in HH:MM format."""
@@ -1273,8 +1390,47 @@ class CustomTimeModal(discord.ui.Modal, title="Enter Custom Time"):
                         try:
                             message = await channel.fetch_message(message_id)
                             await message.edit(embed=embed, view=new_view)
+                            logger.info(f"Successfully refreshed marketplace embed with {len(listings)} listings")
                         except discord.NotFound:
-                            logger.warning(f"Message {message_id} not found")
+                            logger.warning(f"Message {message_id} not found, searching for message...")
+                            # If message not found by ID, search for it
+                            async for msg in channel.history(limit=50):
+                                if (msg.author == self.bot.user and 
+                                    msg.embeds and 
+                                    msg.embeds[0].title and 
+                                    self.listing_data['listing_type'].upper() in msg.embeds[0].title and
+                                    self.listing_data['zone'].lower() in msg.embeds[0].title.lower()):
+                                    await msg.edit(embed=embed, view=new_view)
+                                    # Update stored message ID
+                                    await self.bot.db_manager.execute_command(
+                                        "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                        msg.id, channel.id
+                                    )
+                                    logger.info(f"Found and updated marketplace message, new ID: {msg.id}")
+                                    break
+                    else:
+                        logger.warning(f"No message_id stored for channel {channel.id}, searching...")
+                        # No stored message ID, search for the message
+                        async for msg in channel.history(limit=50):
+                            if (msg.author == self.bot.user and 
+                                msg.embeds and 
+                                msg.embeds[0].title and 
+                                self.listing_data['listing_type'].upper() in msg.embeds[0].title and
+                                self.listing_data['zone'].lower() in msg.embeds[0].title.lower()):
+                                await msg.edit(embed=embed, view=new_view)
+                                # Store the message ID for future use
+                                await self.bot.db_manager.execute_command(
+                                    "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                                    msg.id, channel.id
+                                )
+                                logger.info(f"Found and updated marketplace message, stored ID: {msg.id}")
+                                break
+                else:
+                    logger.warning(f"Channel {channel_data['channel_id']} not found")
+            else:
+                logger.warning(f"No channel info found for {self.listing_data['listing_type']} in {self.listing_data['zone']}")
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
