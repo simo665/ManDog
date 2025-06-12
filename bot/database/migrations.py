@@ -80,6 +80,7 @@ class MigrationManager:
             6: self.add_guild_rating_configs,
             7: self.add_listing_queues_table,
             8: self.add_items_table,
+            9: self.add_scheduled_events_table,
         }
 
     async def migration_001_initial_schema(self):
@@ -198,6 +199,30 @@ class MigrationManager:
         await self.populate_items_table()
         
         logger.info("Items table created and populated successfully")
+
+    async def add_scheduled_events_table(self):
+        """Add scheduled_events table for event scheduling."""
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS scheduled_events (
+                id SERIAL PRIMARY KEY,
+                listing_id INTEGER REFERENCES listings(id) ON DELETE CASCADE,
+                event_time TIMESTAMPTZ NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processed', 'cancelled')),
+                event_type VARCHAR(50) DEFAULT 'listing_reminder',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                processed_at TIMESTAMPTZ
+            )
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_scheduled_events_time ON scheduled_events(event_time)
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_scheduled_events_status ON scheduled_events(status)
+        """)
+        
+        logger.info("Scheduled events table created successfully")
 
     async def populate_items_table(self):
         """Populate items table with initial marketplace data."""

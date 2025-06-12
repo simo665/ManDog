@@ -32,20 +32,7 @@ def main():
     bot = MandokBot()
     
     try:
-        async def run_bot():
-            # Call setup_hook to initialize db_manager
-            await bot.setup_hook() 
-
-            # Initialize scheduler service
-            from bot.services.scheduler import SchedulerService
-            bot.scheduler = SchedulerService(bot)
-            await bot.scheduler.start()
-
-            # Start the bot
-            logger.info("Starting Mandok Bot...")
-            await bot.start(BOT_TOKEN)
-
-        asyncio.run(run_bot())
+        asyncio.run(bot.start(BOT_TOKEN))
     except KeyboardInterrupt:
         logger.info("Bot shutdown requested by user")
     except Exception as e:

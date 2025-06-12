@@ -27,6 +27,7 @@ class MandokBot(commands.Bot):
     async def setup_hook(self):
         """Called when the bot is starting up."""
         logger.info("Setting up bot...")
+        
         # Initialize database manager
         self.db_manager = DatabaseManager()
         await self.db_manager.initialize()
@@ -41,6 +42,11 @@ class MandokBot(commands.Bot):
         # Initialize scheduler
         self.scheduler = ExpiryScheduler(self)
 
+        # Initialize scheduler service
+        from bot.services.scheduler import SchedulerService
+        self.scheduler_service = SchedulerService(self)
+        await self.scheduler_service.start()
+
         # Add command cogs
         if 'MarketplaceCommands' not in self.cogs:
             await self.add_cog(MarketplaceCommands(self))
@@ -48,8 +54,12 @@ class MandokBot(commands.Bot):
         else:
             logger.warning("MarketplaceCommands cog already loaded.")
             
-        # Start background tasks
-        self.expiry_check.start()
+        # Start background tasks only if not already running
+        if not self.expiry_check.is_running():
+            self.expiry_check.start()
+            logger.info("Started expiry check task")
+        else:
+            logger.warning("Expiry check task is already running.")
 
         logger.info("Bot setup complete")
 
@@ -171,6 +181,10 @@ class MandokBot(commands.Bot):
         # Stop background tasks
         if self.expiry_check.is_running():
             self.expiry_check.stop()
+
+        # Stop scheduler service
+        if hasattr(self, 'scheduler_service'):
+            await self.scheduler_service.stop()
 
         # Close database connection
         if self.db_manager:
