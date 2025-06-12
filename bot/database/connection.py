@@ -760,84 +760,19 @@ class DatabaseManager:
             logger.error(f"Error creating scheduled event: {e}")
             return None
 
-    async def get_pending_events(self):
-        """Get pending scheduled events that should trigger."""
+    async def get_pending_events(self) -> List[Dict[str, Any]]:
+        """Get all pending scheduled events that should trigger."""
         try:
-            return await self.execute_query(
-                """
+            current_time = datetime.now(timezone.utc)
+            query = """
                 SELECT se.*, l.user_id, l.item, l.zone, l.guild_id
                 FROM scheduled_events se
                 JOIN listings l ON se.listing_id = l.id
                 WHERE se.status = 'pending' 
                   AND se.event_time <= $1
                   AND l.active = TRUE
-                """,
-                datetime.now(timezone.utc)
-            )
+            """
+            return await self.execute_query(query, current_time)
         except Exception as e:
             logger.error(f"Error getting pending events: {e}")
             return []
-
-    async def create_scheduled_event(self, listing_id: int, event_time: datetime):
-        """Create a scheduled event for a listing."""
-        try:
-            await self.execute_command(
-                """
-                INSERT INTO scheduled_events (listing_id, event_time, status)
-                VALUES ($1, $2, 'pending')
-                """,
-                listing_id, event_time
-            )
-            logger.info(f"Created scheduled event for listing {listing_id} at {event_time}")
-            return True
-        except Exception as e:
-            logger.error(f"Error creating scheduled event: {e}")
-            return False
-
-    async def update_event_status(self, event_id: int, status: str):
-        """Update the status of a scheduled event."""
-        try:
-            await self.execute_command(
-                "UPDATE scheduled_events SET status = $1 WHERE id = $2",
-                status, event_id
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Error updating event status: {e}")
-            return False
-
-    async def get_event_participants(self, event_id: int):
-        """Get participants who confirmed for an event."""
-        try:
-            result = await self.execute_query(
-                "SELECT participants FROM scheduled_events WHERE id = $1",
-                event_id
-            )
-            if result:
-                participants = result[0]['participants']
-                if isinstance(participants, str):
-                    import json
-                    return json.loads(participants)
-                return participants or []
-            return []
-        except Exception as e:
-            logger.error(f"Error getting event participants: {e}")
-            return []
-
-    async def add_event_participant(self, event_id: int, user_id: int):
-        """Add a participant to an event."""
-        try:
-            # Get current participants
-            participants = await self.get_event_participants(event_id)
-            if user_id not in participants:
-                participants.append(user_id)
-
-                import json
-                await self.execute_command(
-                    "UPDATE scheduled_events SET participants = $1 WHERE id = $2",
-                    json.dumps(participants), event_id
-                )
-            return True
-        except Exception as e:
-            logger.error(f"Error adding event participant: {e}")
-            return False

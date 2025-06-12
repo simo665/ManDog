@@ -353,18 +353,16 @@ class SchedulerService:
             zone = event['zone']
 
             # Mark event as started
-            await self.bot.db_manager.update_event_status(event['id'], 'started')
+            await self.bot.db_manager.execute_command(
+                "UPDATE scheduled_events SET status = 'started' WHERE id = $1",
+                event['id']
+            )
 
-            # Step 1: Delete the item from seller's listing (embed + database)
+            # Deactivate the listing
             await self.bot.db_manager.execute_command(
                 "UPDATE listings SET active = FALSE WHERE id = $1",
                 listing_id
             )
-
-            # Refresh marketplace embeds to remove the listing
-            from bot.services.marketplace import MarketplaceService
-            marketplace_service = MarketplaceService(self.bot)
-            await marketplace_service.refresh_marketplace_embeds_for_zone(guild_id, 'WTS', zone)
 
             # Get guild and create notification
             guild = self.bot.get_guild(guild_id)
@@ -378,17 +376,17 @@ class SchedulerService:
             for item_queues in queue_data.values():
                 participants.extend(item_queues)
 
-            # Step 2: Notify seller and queued buyers
-            embed = discord.Embed(
-                title="⏳ Event Started",
-                description=f"The event for **{item_name}** in **{zone.title()}** has started!\n\nPlease confirm your participation to proceed.",
-                color=0xFFAA00,
-                timestamp=datetime.now(timezone.utc)
-            )
-
             # Create confirmation view
             from bot.ui.views_ordering import OrderConfirmationView
             view = OrderConfirmationView(self.bot, event['id'], seller_id, participants)
+
+            # Create notification embed
+            embed = discord.Embed(
+                title="🔔 Event Started",
+                description=f"The event for **{item_name}** in **{zone.title()}** has started!\n\nPlease confirm your participation.",
+                color=0xFFAA00,
+                timestamp=datetime.now(timezone.utc)
+            )
 
             # Send notifications to seller
             try:
@@ -407,63 +405,13 @@ class SchedulerService:
                 except discord.Forbidden:
                     logger.warning(f"Could not DM participant {participant_id}")
 
+            # Schedule rating prompt (1 hour later)
+            asyncio.create_task(self.schedule_rating_prompt(event['id'], 3600))  # 1 hour
+
             logger.info(f"Triggered event {event['id']} for listing {listing_id}")
 
         except Exception as e:
             logger.error(f"Error triggering event {event['id']}: {e}")
-
-    async def start_confirmation_timer(self, event_id: int):
-        """Start 1-hour timer after buyers confirm participation."""
-        try:
-            # Wait 1 hour
-            await asyncio.sleep(3600)  # 1 hour = 3600 seconds
-            
-            # Get event details
-            event_data = await self.bot.db_manager.execute_query(
-                """
-                SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
-                FROM scheduled_events se
-                JOIN listings l ON se.listing_id = l.id
-                WHERE se.id = $1
-                """,
-                event_id
-            )
-
-            if not event_data:
-                return
-
-            event = event_data[0]
-            
-            # Get confirmed participants
-            participants = await self.bot.db_manager.get_event_participants(event_id)
-
-            # Step 4: Send rating prompts to buyers
-            guild = self.bot.get_guild(event['guild_id'])
-            if guild:
-                for participant_id in participants:
-                    try:
-                        participant = guild.get_member(participant_id)
-                        if participant:
-                            from bot.ui.views_ordering import RatingView
-                            view = RatingView(self.bot, event['seller_id'], event['listing_id'])
-                            
-                            embed = discord.Embed(
-                                title="⭐ Rate Your Experience",
-                                description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
-                                color=0x3B82F6
-                            )
-                            
-                            await participant.send(embed=embed, view=view)
-                    except Exception as e:
-                        logger.error(f"Error sending rating prompt to {participant_id}: {e}")
-
-            # Mark event as completed
-            await self.bot.db_manager.update_event_status(event_id, 'completed')
-            
-            logger.info(f"Completed rating prompt phase for event {event_id}")
-
-        except Exception as e:
-            logger.error(f"Error in confirmation timer: {e}")
 
     async def schedule_rating_prompt(self, event_id: int, delay_seconds: int):
         """Schedule rating prompt after delay."""
