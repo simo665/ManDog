@@ -53,91 +53,108 @@ class MarketplaceEmbeds:
         return embed
 
     def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]], page: int = 0) -> discord.Embed:
-        """Create the main marketplace embed with queue information."""
+        """Create marketplace embed with pagination."""
         try:
-            # Calculate pagination
+            # Configuration
             items_per_page = 10
             start_idx = page * items_per_page
             end_idx = start_idx + items_per_page
-            paginated_listings = listings[start_idx:end_idx]
+            page_listings = listings[start_idx:end_idx]
 
-            # Determine color and emoji
+            # Color and emoji based on type
             color = self.COLORS['wts'] if listing_type.upper() == 'WTS' else self.COLORS['wtb']
-            emoji = "🔸" if listing_type.upper() == 'WTS' else "🔹"
+            type_emoji = "🔸" if listing_type.upper() == 'WTS' else "🔹"
 
-            # Count total items
-            total_items = len(listings)
-
-            # Create embed title
-            title = f"{emoji} {listing_type.upper()} - {zone.title()}"
-
+            # Create embed
+            title = f"{type_emoji} {listing_type.upper()} - {zone.title()}"
             embed = discord.Embed(
                 title=title,
-                description=f"📂 {zone.title()} ({total_items} item{'s' if total_items != 1 else ''})",
                 color=color,
                 timestamp=datetime.now(timezone.utc)
             )
 
-            if not paginated_listings:
+            if not page_listings:
+                embed.description = f"No active {listing_type.upper()} listings in {zone.title()}"
                 embed.add_field(
-                    name="No listings",
-                    value=f"No active {listing_type} listings in {zone.title()}",
+                    name="📝 How to List",
+                    value=f"Use the **Add {listing_type.upper()}** button below to create a listing!",
                     inline=False
                 )
             else:
-                # Group listings by user and display them with queue information
-                for listing in paginated_listings:
-                    user_id = listing['user_id']
-                    item = listing['item']
-                    scheduled_time = listing.get('scheduled_time')
-                    notes = listing.get('notes', '')
-                    listing_id = listing['id']
+                # Add listings
+                for i, listing in enumerate(page_listings, start_idx + 1):
+                    if listing_type.upper() == "WTS":
+                        # New WTS format: 📂 [Monster] (X item)
+                        field_name = f"📂 {listing['subcategory']} ({listing['quantity']} item)"
 
-                    # Format the scheduled time using Discord timestamp
-                    time_str = "Not scheduled"
-                    if scheduled_time:
-                        timestamp = int(scheduled_time.timestamp())
-                        time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
+                        # Format timestamp
+                        time_str = "No time set"
+                        if listing.get('scheduled_time'):
+                            timestamp = int(listing['scheduled_time'].timestamp())
+                            time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
 
-                    # Start building the listing display
-                    listing_text = f"> 📦 **Item:**\n>  ╰┈➤ **{item}** by <@{user_id}>\n> ⏰ **Time:** {time_str}"
-
-                    # Add queue information if it's a WTS listing
-                    if listing_type.upper() == 'WTS':
-                        # Get queue data for this listing (this would need to be passed from the calling function)
-                        # For now, we'll assume it's available in the listing data
-                        queues = listing.get('queues', {})
-                        if queues and item in queues:
-                            queue_users = queues[item]
+                        # Format queue information
+                        queue_str = "No queue"
+                        if 'queues' in listing and listing['queues']:
+                            queue_users = []
+                            for item_name, users in listing['queues'].items():
+                                for user_id in users:
+                                    queue_users.append(f"<@{user_id}>")
                             if queue_users:
-                                queue_mentions = ' • '.join([f"<@{user_id}>" for user_id in queue_users])
-                                listing_text += f"\n> 👥 **Queue:** {queue_mentions}"
+                                queue_str = " • ".join(queue_users)
 
-                    if notes:
-                        listing_text += f"\n> 📝 **Notes:** {notes}"
+                        # Notes
+                        notes_str = listing.get('notes', '').strip() or "No notes."
+
+                        # New WTS format
+                        field_value = (
+                            f"> 📦 Item: ╰┈➤ {listing['item']} by <@{listing['user_id']}>\n"
+                            f"> ⏰ Time: {time_str}\n"
+                            f"> 📝 Notes: {notes_str}\n"
+                            f"> 👥 Queue: {queue_str}"
+                        )
+                    else:
+                        # WTB format (unchanged)
+                        # Format timestamp
+                        time_str = "No time set"
+                        if listing.get('scheduled_time'):
+                            timestamp = int(listing['scheduled_time'].timestamp())
+                            time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
+
+                        # Format reputation
+                        rep_avg = listing.get('reputation_avg', 0.0)
+                        if isinstance(rep_avg, str):
+                            rep_avg = float(rep_avg) if rep_avg != 'None' else 0.0
+
+                        stars = "⭐" * int(rep_avg) + "☆" * (5 - int(rep_avg))
+                        reputation_str = f" {stars}" if rep_avg > 0 else ""
+
+                        # Format field
+                        field_name = f"{i}. {listing['subcategory']} ({listing['quantity']}x)"
+                        field_value = (
+                            f"**Item:** {listing['item']}\n"
+                            f"**Buyer:** <@{listing['user_id']}>{reputation_str}\n"
+                            f"**Time:** {time_str}"
+                        )
+
+                        if listing.get('notes'):
+                            field_value += f"\n**Notes:** {listing['notes']}"
 
                     embed.add_field(
-                        name=f"📂 {zone.title()} (1 item)",
-                        value=listing_text,
+                        name=field_name,
+                        value=field_value,
                         inline=False
                     )
 
-            # Add pagination info if needed
-            total_pages = max(1, (total_items + items_per_page - 1) // items_per_page)
-            if total_pages > 1:
-                embed.set_footer(text=f"Page {page + 1} of {total_pages}")
+            # Add pagination info
+            total_pages = max(1, (len(listings) + items_per_page - 1) // items_per_page)
+            embed.set_footer(text=f"Page {page + 1}/{total_pages} • {len(listings)} total listings")
 
             return embed
 
         except Exception as e:
             logger.error(f"Error creating marketplace embed: {e}")
-            # Return a basic error embed
-            embed = discord.Embed(
-                title="❌ Error",
-                description="Failed to load marketplace data",
-                color=self.COLORS['error']
-            )
-            return embed
+            return self.create_error_embed("Failed to create marketplace display")
 
     def create_listing_confirmation_embed(self, listing_data: Dict[str, Any]) -> discord.Embed:
         """Create confirmation embed for new listing."""

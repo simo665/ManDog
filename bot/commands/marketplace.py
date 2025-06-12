@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 
 from bot.ui.embeds import MarketplaceEmbeds
 from bot.ui.views import SetupView, MarketplaceView
+from bot.ui.modals import TimezoneModal
 from bot.utils.permissions import is_admin
+from config.settings import BOT_OWNERS
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +187,82 @@ class MarketplaceCommands(commands.Cog):
                 await interaction.edit_original_response(embed=error_embed, view=None)
             except Exception as edit_error:
                 logger.error(f"Failed to edit interaction response: {edit_error}")
+
+    @app_commands.command(name="settimezone", description="Set your timezone for scheduling")
+    async def set_timezone(self, interaction: discord.Interaction):
+        """Set user timezone."""
+        try:
+            modal = TimezoneModal(self.bot)
+            await interaction.response.send_modal(modal)
+        except Exception as e:
+            logger.error(f"Error in set timezone command: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while opening timezone setup.",
+                ephemeral=True
+            )
+
+    @app_commands.command(name="items", description="Admin command to manage items")
+    @app_commands.describe(
+        action="Action to perform",
+        zone="Zone name",
+        monster_name="Monster name",
+        item_name="Item name"
+    )
+    async def items_command(
+        self, 
+        interaction: discord.Interaction,
+        action: str,
+        zone: str = None,
+        monster_name: str = None,
+        item_name: str = None
+    ):
+        """Admin command for managing items."""
+        try:
+            # Check if user is bot owner
+            if interaction.user.id not in BOT_OWNERS:
+                await interaction.response.send_message(
+                    "❌ This command is restricted to bot owners only.",
+                    ephemeral=True
+                )
+                return
+
+            if action.lower() == "add":
+                if not all([zone, monster_name, item_name]):
+                    await interaction.response.send_message(
+                        "❌ Usage: `/items add <zone> <monster_name> <item_name>`",
+                        ephemeral=True
+                    )
+                    return
+
+                # Add item to database
+                success = await self.bot.db_manager.add_item(
+                    zone.lower(), monster_name, item_name, interaction.user.id
+                )
+
+                if success:
+                    embed = discord.Embed(
+                        title="✅ Item Added",
+                        description=f"Successfully added **{item_name}** from **{monster_name}** in **{zone}**",
+                        color=0x00FF00
+                    )
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                else:
+                    await interaction.response.send_message(
+                        "❌ Failed to add item. It may already exist.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.response.send_message(
+                    "❌ Valid actions: `add`",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error in items command: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while managing items.",
+                ephemeral=True
+            )t_error}")
 
     async def cleanup_invalid_channels(self, guild: discord.Guild):
         """Clean up database entries for channels that no longer exist."""

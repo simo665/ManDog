@@ -183,6 +183,45 @@ class DatabaseSchema:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE,
                 FOREIGN KEY (admin_id) REFERENCES users(user_id) ON DELETE SET NULL
             );
+        """,
+        
+        'items': """
+            CREATE TABLE IF NOT EXISTS items (
+                id SERIAL PRIMARY KEY,
+                zone VARCHAR(50) NOT NULL,
+                monster_name VARCHAR(100) NOT NULL,
+                item_name VARCHAR(200) NOT NULL,
+                added_by BIGINT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (added_by) REFERENCES users(user_id) ON DELETE SET NULL,
+                UNIQUE(zone, monster_name, item_name)
+            );
+        """,
+        
+        'listing_queues': """
+            CREATE TABLE IF NOT EXISTS listing_queues (
+                id SERIAL PRIMARY KEY,
+                listing_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                item_name VARCHAR(200) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                UNIQUE(listing_id, user_id, item_name)
+            );
+        """,
+        
+        'scheduled_events': """
+            CREATE TABLE IF NOT EXISTS scheduled_events (
+                id SERIAL PRIMARY KEY,
+                listing_id INTEGER NOT NULL,
+                event_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'started', 'completed', 'cancelled')),
+                seller_confirmed BOOLEAN DEFAULT FALSE,
+                participants JSONB DEFAULT '[]',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+            );
         """
     }
     

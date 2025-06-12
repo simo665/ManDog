@@ -296,3 +296,170 @@ class ExtendListingView:
     # This would implement the Discord UI for extending listings
     # For now, we'll keep it as a placeholder class
     pass
+import asyncio
+import logging
+from datetime import datetime, timezone
+from typing import Dict, Any, List
+import discord
+
+logger = logging.getLogger(__name__)
+
+class SchedulerService:
+    """Service for handling scheduled events and notifications."""
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.running = False
+
+    async def start(self):
+        """Start the scheduler service."""
+        self.running = True
+        asyncio.create_task(self.event_loop())
+        logger.info("Scheduler service started")
+
+    async def stop(self):
+        """Stop the scheduler service."""
+        self.running = False
+        logger.info("Scheduler service stopped")
+
+    async def event_loop(self):
+        """Main event loop for checking scheduled events."""
+        while self.running:
+            try:
+                await self.check_pending_events()
+                await asyncio.sleep(60)  # Check every minute
+            except Exception as e:
+                logger.error(f"Error in scheduler event loop: {e}")
+                await asyncio.sleep(60)
+
+    async def check_pending_events(self):
+        """Check for events that should trigger."""
+        try:
+            pending_events = await self.bot.db_manager.get_pending_events()
+            
+            for event in pending_events:
+                await self.trigger_event(event)
+
+        except Exception as e:
+            logger.error(f"Error checking pending events: {e}")
+
+    async def trigger_event(self, event: Dict[str, Any]):
+        """Trigger a scheduled event."""
+        try:
+            listing_id = event['listing_id']
+            guild_id = event['guild_id']
+            seller_id = event['user_id']
+            item_name = event['item']
+            zone = event['zone']
+
+            # Mark event as started
+            await self.bot.db_manager.execute_command(
+                "UPDATE scheduled_events SET status = 'started' WHERE id = $1",
+                event['id']
+            )
+
+            # Deactivate the listing
+            await self.bot.db_manager.execute_command(
+                "UPDATE listings SET active = FALSE WHERE id = $1",
+                listing_id
+            )
+
+            # Get guild and create notification
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                logger.warning(f"Guild {guild_id} not found for event")
+                return
+
+            # Get queue participants
+            queue_data = await self.bot.db_manager.get_listing_queues(listing_id)
+            participants = []
+            for item_queues in queue_data.values():
+                participants.extend(item_queues)
+
+            # Create confirmation view
+            from bot.ui.views_ordering import OrderConfirmationView
+            view = OrderConfirmationView(self.bot, event['id'], seller_id, participants)
+
+            # Create notification embed
+            embed = discord.Embed(
+                title="🔔 Event Started",
+                description=f"The event for **{item_name}** in **{zone.title()}** has started!\n\nPlease confirm your participation.",
+                color=0xFFAA00,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Send notifications to seller
+            try:
+                seller = guild.get_member(seller_id)
+                if seller:
+                    await seller.send(embed=embed, view=view)
+            except discord.Forbidden:
+                logger.warning(f"Could not DM seller {seller_id}")
+
+            # Send notifications to queue participants
+            for participant_id in participants:
+                try:
+                    participant = guild.get_member(participant_id)
+                    if participant:
+                        await participant.send(embed=embed, view=view)
+                except discord.Forbidden:
+                    logger.warning(f"Could not DM participant {participant_id}")
+
+            # Schedule rating prompt (1 hour later)
+            asyncio.create_task(self.schedule_rating_prompt(event['id'], 3600))  # 1 hour
+
+            logger.info(f"Triggered event {event['id']} for listing {listing_id}")
+
+        except Exception as e:
+            logger.error(f"Error triggering event {event['id']}: {e}")
+
+    async def schedule_rating_prompt(self, event_id: int, delay_seconds: int):
+        """Schedule rating prompt after delay."""
+        try:
+            await asyncio.sleep(delay_seconds)
+            
+            # Get event details
+            event_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.id = $1
+                """,
+                event_id
+            )
+
+            if not event_data:
+                return
+
+            event = event_data[0]
+            
+            # Get confirmed participants
+            participants = event.get('participants', [])
+            if isinstance(participants, str):
+                import json
+                participants = json.loads(participants)
+
+            # Send rating prompts
+            from bot.ui.views_ordering import RatingView
+            
+            for participant_id in participants:
+                try:
+                    guild = self.bot.get_guild(event['guild_id'])
+                    if guild:
+                        participant = guild.get_member(participant_id)
+                        if participant:
+                            view = RatingView(self.bot, event['seller_id'], event['listing_id'])
+                            
+                            embed = discord.Embed(
+                                title="⭐ Rate Your Experience",
+                                description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
+                                color=0x3B82F6
+                            )
+                            
+                            await participant.send(embed=embed, view=view)
+                except Exception as e:
+                    logger.error(f"Error sending rating prompt to {participant_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in rating prompt schedule: {e}")

@@ -55,6 +55,13 @@ ADMIN_USER_IDS = [
     if user_id.strip().isdigit()
 ]
 
+# Bot owners configuration
+BOT_OWNERS = [
+    int(user_id.strip()) 
+    for user_id in os.getenv("BOT_OWNERS", "").split(",") 
+    if user_id.strip().isdigit()
+]
+
 ADMIN_ROLE_NAMES = [
     role.strip() 
     for role in os.getenv("ADMIN_ROLE_NAMES", "admin,administrator,mandok admin").split(",")

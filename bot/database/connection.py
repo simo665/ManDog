@@ -703,3 +703,76 @@ class DatabaseManager:
             logger.info(f"Cleaned up data for guild {guild_id}")
         except Exception as e:
             logger.error(f"Error cleaning up guild data: {e}")
+
+    async def set_user_timezone(self, user_id: int, timezone: str) -> bool:
+        """Set user's timezone."""
+        try:
+            await self.ensure_user_exists(user_id)
+            command = """
+                UPDATE users 
+                SET timezone = $1, updated_at = $2
+                WHERE user_id = $3
+            """
+            await self.execute_command(command, timezone, datetime.now(timezone.utc), user_id)
+            return True
+        except Exception as e:
+            logger.error(f"Error setting user timezone: {e}")
+            return False
+
+    async def get_user_timezone(self, user_id: int) -> Optional[str]:
+        """Get user's timezone."""
+        try:
+            result = await self.execute_query(
+                "SELECT timezone FROM users WHERE user_id = $1",
+                user_id
+            )
+            return result[0]['timezone'] if result else None
+        except Exception as e:
+            logger.error(f"Error getting user timezone: {e}")
+            return None
+
+    async def add_item(self, zone: str, monster_name: str, item_name: str, added_by: int) -> bool:
+        """Add new item to database."""
+        try:
+            await self.ensure_user_exists(added_by)
+            command = """
+                INSERT INTO items (zone, monster_name, item_name, added_by)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (zone, monster_name, item_name) DO NOTHING
+            """
+            await self.execute_command(command, zone, monster_name, item_name, added_by)
+            return True
+        except Exception as e:
+            logger.error(f"Error adding item: {e}")
+            return False
+
+    async def create_scheduled_event(self, listing_id: int, event_time: datetime) -> Optional[int]:
+        """Create a scheduled event for a listing."""
+        try:
+            command = """
+                INSERT INTO scheduled_events (listing_id, event_time)
+                VALUES ($1, $2)
+                RETURNING id
+            """
+            result = await self.execute_query(command, listing_id, event_time)
+            return result[0]['id'] if result else None
+        except Exception as e:
+            logger.error(f"Error creating scheduled event: {e}")
+            return None
+
+    async def get_pending_events(self) -> List[Dict[str, Any]]:
+        """Get all pending scheduled events that should trigger."""
+        try:
+            current_time = datetime.now(timezone.utc)
+            query = """
+                SELECT se.*, l.user_id, l.item, l.zone, l.guild_id
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.status = 'pending' 
+                  AND se.event_time <= $1
+                  AND l.active = TRUE
+            """
+            return await self.execute_query(query, current_time)
+        except Exception as e:
+            logger.error(f"Error getting pending events: {e}")
+            return []
