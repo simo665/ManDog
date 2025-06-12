@@ -873,8 +873,6 @@ class TimezoneModal(discord.ui.Modal, title="Set Your Timezone"):
 
             # Save timezone
             success = await self.bot.db_manager.set_user_timezone(interaction.user.id, timezone_str)
-
-            ```text
             if success:
                 embed = discord.Embed(
                     title="✅ Timezone Set",
