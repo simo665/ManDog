@@ -7,6 +7,7 @@ from discord.ext import commands
 import logging
 from typing import Optional
 from datetime import datetime, timezone
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -511,3 +512,355 @@ class TradeRatingView(discord.ui.View):
                 await interaction.response.send_message("❌ An error occurred", ephemeral=True)
             except:
                 pass
+```
+
+```python
+"""
+Discord UI Views for the ordering system.
+"""
+
+import discord
+from discord.ext import commands
+import logging
+from typing import Optional
+from datetime import datetime, timezone
+import asyncio
+
+logger = logging.getLogger(__name__)
+
+class OrderConfirmationView(discord.ui.View):
+    """View for order confirmation."""
+
+    def __init__(self, bot, order_id: str, role: str):
+        super().__init__(timeout=3600)  # 1 hour timeout
+        self.bot = bot
+        self.order_id = order_id
+        self.role = role
+
+    @discord.ui.button(label="✅ Confirm Trade", style=discord.ButtonStyle.green)
+    async def confirm_trade(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle trade confirmation."""
+        try:
+            await interaction.response.defer()
+
+            ordering_service = self.bot.ordering_service
+
+            result = await ordering_service.handle_order_confirmation(
+                self.order_id, interaction.user.id, True
+            )
+
+            if result == "both_confirmed":
+                # Both parties confirmed - show completion message
+                embed = discord.Embed(
+                    title="🎉 Trade Confirmed!",
+                    description="Both parties have confirmed the trade! Please check your DMs for rating and completion instructions.",
+                    color=0x00FF00,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+                logger.info(f"✅ BUTTON DEBUG: Both parties confirmed trade {self.order_id}")
+
+            elif result == "waiting":
+                # Only this user confirmed - show waiting message
+                embed = discord.Embed(
+                    title="✅ Trade Confirmed",
+                    description="You have confirmed this trade. Waiting for the other party to confirm.",
+                    color=0x00FF00,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+                logger.info(f"✅ BUTTON DEBUG: Successfully confirmed trade {self.order_id}")
+
+            else:
+                logger.error(f"❌ BUTTON DEBUG: Failed to confirm trade {self.order_id}")
+                await interaction.followup.send("❌ Failed to confirm trade - order may have expired", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error confirming trade: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(label="❌ Decline Trade", style=discord.ButtonStyle.red)
+    async def decline_trade(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle trade decline."""
+        try:
+            await interaction.response.defer()
+
+            ordering_service = self.bot.ordering_service
+
+            result = await ordering_service.handle_order_confirmation(
+                self.order_id, interaction.user.id, False
+            )
+
+            if result:
+                # Update the message
+                embed = discord.Embed(
+                    title="❌ Trade Declined",
+                    description="You have declined this trade. The other party has been notified.",
+                    color=0xFF0000,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+                logger.info(f"✅ BUTTON DEBUG: Successfully declined trade {self.order_id}")
+            else:
+                logger.error(f"❌ BUTTON DEBUG: Failed to decline trade {self.order_id}")
+                await interaction.followup.send("❌ Failed to decline trade - it may have already been processed", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error declining trade: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+    @discord.ui.button(label="✅ Confirm Participation", style=discord.ButtonStyle.green)
+    async def confirm_participation(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle participation confirmation."""
+        try:
+            # Add user to event participants
+            success = await self.bot.db_manager.add_event_participant(self.event_id, interaction.user.id)
+
+            if success:
+                await interaction.response.send_message(
+                    "✅ Your participation has been confirmed! You will receive a rating prompt in 1 hour.",
+                    ephemeral=True
+                )
+
+                # Check if this is the first confirmation - if so, start the timer
+                participants = await self.bot.db_manager.get_event_participants(self.event_id)
+                if len(participants) == 1:  # First confirmation
+                    # Start the 1-hour timer
+                    from bot.services.scheduler import SchedulerService
+                    scheduler = SchedulerService(self.bot)
+                    asyncio.create_task(scheduler.start_confirmation_timer(self.event_id))
+                    logger.info(f"Started 1-hour confirmation timer for event {self.event_id}")
+
+            else:
+                await interaction.response.send_message(
+                    "❌ Could not confirm participation. You may have already confirmed.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error confirming participation: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while confirming participation",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
+class OrderCompletionView(discord.ui.View):
+    """View for order completion and rating."""
+
+    def __init__(self, bot, order_id: str, role: str, other_party_id: int):
+        super().__init__(timeout=7200)  # 2 hour timeout
+        self.bot = bot
+        self.order_id = order_id
+        self.role = role
+        self.other_party_id = other_party_id
+
+    @discord.ui.button(label="⭐ 1 Star", style=discord.ButtonStyle.danger, row=0)
+    async def rate_1_star(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 1 star."""
+        await self.handle_rating(interaction, 1)
+
+    @discord.ui.button(label="⭐⭐ 2 Stars", style=discord.ButtonStyle.danger, row=0)
+    async def rate_2_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 2 stars."""
+        await self.handle_rating(interaction, 2)
+
+    @discord.ui.button(label="⭐⭐⭐ 3 Stars", style=discord.ButtonStyle.secondary, row=0)
+    async def rate_3_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 3 stars."""
+        await self.handle_rating(interaction, 3)
+
+    @discord.ui.button(label="⭐⭐⭐⭐ 4 Stars", style=discord.ButtonStyle.success, row=1)
+    async def rate_4_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 4 stars."""
+        await self.handle_rating(interaction, 4)
+
+    @discord.ui.button(label="⭐⭐⭐⭐⭐ 5 Stars", style=discord.ButtonStyle.success, row=1)
+    async def rate_5_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Rate 5 stars."""
+        await self.handle_rating(interaction, 5)
+
+    async def handle_rating(self, interaction: discord.Interaction, rating: int):
+        """Handle star rating selection."""
+        try:
+            # Open modal for optional comment
+            modal = QuickRatingModal(self.bot, self.order_id, self.other_party_id, rating)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            logger.error(f"Error handling rating: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+class QuickRatingModal(discord.ui.Modal):
+    """Modal for submitting ratings with pre-selected stars."""
+
+    def __init__(self, bot, order_id: str, rated_user_id: int, rating: int):
+        stars = "⭐" * rating
+        super().__init__(title=f"Rate {rating}/5 Stars")
+        self.bot = bot
+        self.order_id = order_id
+        self.rated_user_id = rated_user_id
+        self.rating = rating
+
+        # Comment input
+        self.comment_input = discord.ui.TextInput(
+            label=f"Comment for {stars} rating (optional)",
+            placeholder="Share your experience with this trader...",
+            style=discord.TextStyle.paragraph,
+            min_length=0,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.comment_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle rating submission."""
+        try:
+            comment = self.comment_input.value.strip()
+
+            await interaction.response.defer()
+
+            ordering_service = self.bot.ordering_service
+
+            success = await ordering_service.handle_rating_submission(
+                self.order_id, interaction.user.id, self.rated_user_id, self.rating, comment
+            )
+
+            if success:
+                stars = "⭐" * self.rating
+                if self.rating < 3:
+                    await interaction.followup.send(
+                        f"⚠️ Your {stars} rating has been submitted for admin review due to the low score.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"✅ Thank you for your {stars} rating! It has been recorded.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.followup.send(
+                    "❌ Failed to submit rating. Please try again.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error submitting rating: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+class RatingModal(discord.ui.Modal):
+    """Modal for submitting ratings."""
+
+    def __init__(self, bot, order_id: str, rated_user_id: int):
+        super().__init__(title="Rate Your Trade Partner")
+        self.bot = bot
+        self.order_id = order_id
+        self.rated_user_id = rated_user_id
+
+        # Rating input
+        self.rating_input = discord.ui.TextInput(
+            label="Rating (1-5)",
+            placeholder="Enter a rating from 1 to 5",
+            min_length=1,
+            max_length=1,
+            required=True
+        )
+        self.add_item(self.rating_input)
+
+        # Comment input
+        self.comment_input = discord.ui.TextInput(
+            label="Comment (optional)",
+            placeholder="Share your experience with this trader...",
+            style=discord.TextStyle.paragraph,
+            min_length=0,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.comment_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle rating submission."""
+        try:
+            # Validate rating
+            try:
+                rating = int(self.rating_input.value)
+                if rating < 1 or rating > 5:
+                    raise ValueError("Rating out of range")
+            except ValueError:
+                await interaction.response.send_message(
+                    "❌ Please enter a valid rating between 1 and 5",
+                    ephemeral=True
+                )
+                return
+
+            comment = self.comment_input.value.strip()
+
+            await interaction.response.defer()
+
+            ordering_service = self.bot.ordering_service
+
+            success = await ordering_service.handle_rating_submission(
+                self.order_id, interaction.user.id, self.rated_user_id, rating, comment
+            )
+
+            if success:
+                if rating < 3:
+                    await interaction.followup.send(
+                        "⚠️ Your rating has been submitted for admin review due to the low score.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        "✅ Thank you for your rating! It has been recorded.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.followup.send(
+                    "❌ Failed to submit rating. Please try again.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error submitting rating: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+class RatingModerationView(discord.ui.View):
+    """View for admin rating moderation."""
+
+    def __init__(self, bot, order_id: str, rater_id: int, rated_id: int, rating: int, comment: str):
+        super().__init__(timeout=None)  # Persistent view
+        self.bot = bot
+        self.order_id = order_id
+        self.rater_id = rater_id
