@@ -193,6 +193,12 @@ class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
                 
                 if not user_timezone:
                     # User hasn't set timezone, require them to set it
+                    listing_data_with_details = {
+                        **self.listing_data,
+                        'quantity': quantity_val,
+                        'notes': self.notes.value
+                    }
+                    
                     embed = discord.Embed(
                         title="🌍 Timezone Required",
                         description="You must set your timezone before creating WTS listings with schedules.",
@@ -203,7 +209,7 @@ class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
                     timezone_button = discord.ui.Button(label="Set Timezone", style=discord.ButtonStyle.primary)
                     
                     async def timezone_callback(tz_interaction):
-                        modal = TimezoneModal(self.bot)
+                        modal = TimezoneModal(self.bot, listing_data_with_details)
                         await tz_interaction.response.send_modal(modal)
                     
                     timezone_button.callback = timezone_callback
@@ -828,9 +834,10 @@ class QueueSearchModal(discord.ui.Modal, title="Search Items"):
 class TimezoneModal(discord.ui.Modal, title="Set Your Timezone"):
     """Modal for setting user timezone."""
 
-    def __init__(self, bot):
+    def __init__(self, bot, listing_data=None):
         super().__init__()
         self.bot = bot
+        self.listing_data = listing_data
 
     timezone_input = discord.ui.TextInput(
         label="Timezone",
@@ -871,10 +878,25 @@ class TimezoneModal(discord.ui.Modal, title="Set Your Timezone"):
             if success:
                 embed = discord.Embed(
                     title="✅ Timezone Set",
-                    description=f"Your timezone has been set to `{timezone_str}`",
+                    description=f"Your timezone has been set to `{timezone_str}`\n\nNow continue with your listing...",
                     color=0x00FF00
                 )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                
+                # If we have listing data, continue the listing flow
+                if self.listing_data:
+                    view = DateTimeSelectView(self.bot, self.listing_data, timezone_str)
+                    
+                    schedule_embed = discord.Embed(
+                        title="📅 Schedule Required",
+                        description="WTS listings require a schedule. Please select date and time:",
+                        color=0x3B82F6
+                    )
+                    
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    # Send the scheduling view in a follow-up
+                    await interaction.followup.send(embed=schedule_embed, view=view, ephemeral=True)
+                else:
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
             else:
                 await interaction.response.send_message(
                     "❌ Failed to save timezone. Please try again.",
@@ -957,6 +979,32 @@ class DateTimeSelectView(discord.ui.View):
                 ephemeral=True
             )
 
+    @discord.ui.button(label="⏱️ Enter Custom Time", style=discord.ButtonStyle.secondary, row=2)
+    async def custom_time_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle custom time input."""
+        try:
+            if not self.selected_date:
+                await interaction.response.send_message(
+                    "❌ Please select a date first before entering a custom time.",
+                    ephemeral=True
+                )
+                return
+
+            # Open custom time modal
+            modal = CustomTimeModal(self.bot, self.listing_data, self.user_timezone, self.selected_date)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            logger.error(f"Error opening custom time modal: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while opening the time input",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
     async def create_listing(self, interaction: discord.Interaction):
         """Create listing with selected date and time."""
         try:
@@ -975,6 +1023,160 @@ class DateTimeSelectView(discord.ui.View):
             listing_id = await self.bot.db_manager.create_listing(
                 user_id=interaction.user.id,
                 guild_id=interaction.guild.id,
+
+
+class CustomTimeModal(discord.ui.Modal, title="Enter Custom Time"):
+    """Modal for entering custom time in HH:MM format."""
+
+    def __init__(self, bot, listing_data: Dict[str, Any], user_timezone: str, selected_date: str):
+        super().__init__()
+        self.bot = bot
+        self.listing_data = listing_data
+        self.user_timezone = user_timezone
+        self.selected_date = selected_date
+
+    time_input = discord.ui.TextInput(
+        label="Time (24-hour format)",
+        placeholder="HH:MM (e.g., 14:30 for 2:30 PM)",
+        required=True,
+        max_length=5,
+        min_length=5
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle custom time submission."""
+        try:
+            time_str = self.time_input.value.strip()
+            
+            # Validate time format strictly
+            import re
+            if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', time_str):
+                await interaction.response.send_message(
+                    "❌ Invalid time format. Please use HH:MM in 24-hour format (e.g., 14:30)",
+                    ephemeral=True
+                )
+                return
+
+            # Create the listing with the custom time
+            await self.create_listing_with_custom_time(interaction, time_str)
+
+        except Exception as e:
+            logger.error(f"Error in custom time modal: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while processing the time",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
+    async def create_listing_with_custom_time(self, interaction: discord.Interaction, time_str: str):
+        """Create listing with custom time."""
+        try:
+            # Convert to UTC timestamp
+            user_tz = pytz.timezone(self.user_timezone)
+            
+            # Parse date and time
+            date_obj = datetime.strptime(self.selected_date, "%Y-%m-%d").date()
+            time_obj = datetime.strptime(time_str, "%H:%M").time()
+            
+            # Combine and localize
+            local_dt = user_tz.localize(datetime.combine(date_obj, time_obj))
+            utc_dt = local_dt.astimezone(pytz.UTC)
+
+            # Create listing in database
+            listing_id = await self.bot.db_manager.create_listing(
+                user_id=interaction.user.id,
+                guild_id=interaction.guild.id,
+                listing_type=self.listing_data['listing_type'],
+                zone=self.listing_data['zone'],
+                subcategory=self.listing_data['subcategory'],
+                item=self.listing_data['item'],
+                quantity=self.listing_data.get('quantity', 1),
+                notes=self.listing_data.get('notes', ''),
+                scheduled_time=utc_dt
+            )
+
+            if listing_id:
+                # Create scheduled event
+                await self.bot.db_manager.create_scheduled_event(listing_id, utc_dt)
+                
+                # Create confirmation embed
+                from bot.ui.embeds import MarketplaceEmbeds
+                embeds = MarketplaceEmbeds()
+                
+                listing_data = {
+                    **self.listing_data,
+                    'scheduled_time': utc_dt
+                }
+                
+                embed = embeds.create_listing_confirmation_embed(listing_data)
+                
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+
+                # Refresh marketplace embed
+                asyncio.create_task(self.refresh_marketplace_embed(interaction))
+            else:
+                await interaction.response.send_message(
+                    "❌ Failed to create listing. Please try again.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error creating listing with custom time: {e}")
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "❌ An error occurred while creating the listing",
+                        ephemeral=True
+                    )
+            except:
+                pass
+
+    async def refresh_marketplace_embed(self, interaction: discord.Interaction):
+        """Refresh the marketplace embed after creating a listing."""
+        try:
+            # Import here to avoid circular imports
+            from bot.ui.views import MarketplaceView
+            
+            # Get the marketplace channel for this listing type and zone
+            channel_info = await self.bot.db_manager.execute_query(
+                "SELECT channel_id, message_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = $2 AND zone = $3",
+                interaction.guild.id, self.listing_data['listing_type'], self.listing_data['zone']
+            )
+
+            if channel_info:
+                channel_data = channel_info[0]
+                channel = interaction.guild.get_channel(channel_data['channel_id'])
+                
+                if channel:
+                    # Get updated listings with queue data
+                    view = MarketplaceView(self.bot, self.listing_data['listing_type'], self.listing_data['zone'], 0)
+                    listings = await view.get_listings_with_queues(interaction.guild.id)
+
+                    # Create updated embed
+                    from bot.ui.embeds import MarketplaceEmbeds
+                    embeds = MarketplaceEmbeds()
+                    embed = embeds.create_marketplace_embed(
+                        self.listing_data['listing_type'], self.listing_data['zone'], listings, 0
+                    )
+
+                    # Create new view
+                    new_view = MarketplaceView(self.bot, self.listing_data['listing_type'], self.listing_data['zone'], 0)
+
+                    # Update the message
+                    message_id = channel_data.get('message_id')
+                    if message_id:
+                        try:
+                            message = await channel.fetch_message(message_id)
+                            await message.edit(embed=embed, view=new_view)
+                        except discord.NotFound:
+                            logger.warning(f"Message {message_id} not found")
+
+        except Exception as e:
+            logger.error(f"Error refreshing marketplace embed: {e}")
+
                 listing_type=self.listing_data['listing_type'],
                 zone=self.listing_data['zone'],
                 subcategory=self.listing_data['subcategory'],

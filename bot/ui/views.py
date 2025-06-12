@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from config.ffxi_data import ZONE_DATA
 # Import ordering views
 from bot.ui.views_ordering import (
-    OrderConfirmationView, OrderCompletionView, RatingView, 
+    OrderConfirmationView, OrderCompletionView,
     MatchSelectionView, QueueNotificationView
 )
 import discord

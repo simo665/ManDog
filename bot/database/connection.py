@@ -746,19 +746,20 @@ class DatabaseManager:
             logger.error(f"Error adding item: {e}")
             return False
 
-    async def create_scheduled_event(self, listing_id: int, event_time: datetime) -> Optional[int]:
+    async def create_scheduled_event(self, listing_id: int, event_time: datetime) -> bool:
         """Create a scheduled event for a listing."""
         try:
-            command = """
-                INSERT INTO scheduled_events (listing_id, event_time)
-                VALUES ($1, $2)
-                RETURNING id
-            """
-            result = await self.execute_query(command, listing_id, event_time)
-            return result[0]['id'] if result else None
+            await self.execute_command(
+                """
+                INSERT INTO scheduled_events (listing_id, event_time, created_at)
+                VALUES ($1, $2, $3)
+                """,
+                listing_id, event_time, datetime.now(timezone.utc)
+            )
+            return True
         except Exception as e:
             logger.error(f"Error creating scheduled event: {e}")
-            return None
+            return False
 
     async def get_pending_events(self) -> List[Dict[str, Any]]:
         """Get all pending scheduled events that should trigger."""
