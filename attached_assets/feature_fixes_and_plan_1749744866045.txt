@@ -1,0 +1,72 @@
+Hello can you please update the current project to fix the issues, here are all the details:
+
+1. 🛠 Auto-Setup Database on First Run
+
+- Current Flow: Requires manually running setup_database.py before main.py.
+- Goal: Automate DB setup inside main.py, only if tables don't exist.
+- Implementation:
+  - Use CREATE TABLE IF NOT EXISTS for all required tables.
+  - Ensure setup_database.py logic is modularized into a function (e.g., initialize_db()), and import it into main.py.
+  - On main.py startup, call initialize_db() safely before launching the bot.
+
+  ✅ Must skip creating tables if they already exist.
+  ✅ Must not raise exceptions or overwrite existing data.
+
+---
+
+2. 🌍 Fix Timezone Saving & Usage
+
+- Current Issue: When a user without a saved timezone adds an item, the bot prompts for timezone but fails to save it.
+  - Error shown: "❌ Failed to save timezone. Please try again."
+
+Fix Required:
+- ✅ Check DB write permissions and exception handling in the timezone saving logic.
+- ✅ Validate that the entered timezone exists in the IANA timezone database.
+- ✅ After saving the timezone, allow the process to continue (do not abort or error out).
+- ✅ Use the saved timezone to:
+  - Convert user-input local time to a UNIX timestamp.
+  - Format it properly using <t:{timestamp}:f> and <t:{timestamp}:R> for Discord.
+
+---
+
+3. 🕒 Add Custom Time Option (HH:MM)
+
+- Current Behavior: Only date and time dropdown menus exist.
+- New Requirement: Add a button labeled "⏱ Enter Custom Time" next to dropdowns.
+
+On Click:
+- ✅ Open a modal asking for custom time input using "HH:MM" format (24-hour).
+- ✅ Validate input strictly (regex: ^\d{2}:\d{2}$).
+- ✅ Combine with selected date to compute a valid timestamp using user’s saved timezone.
+- ✅ Continue with item submission using this timestamp.
+
+⚠️ Do not remove the existing dropdowns – this is an additional input method.
+
+---
+
+4. ⏰ Event Trigger + Notification + Rating System
+
+Event Flow:
+When the event time arrives for a seller’s item:
+1. ✅ Delete the item from the seller’s listing (from both embed and database).
+2. ✅ Notify the seller and queued buyers:
+   "⏳ The event for [Item Name] has started. Please confirm your participation."
+3. ✅ After confirmation, start a 1-hour timer (stored in DB).
+4. ✅ After 1 hour, send buyers a rating prompt for the seller (5-star system).
+5. ✅ Save each rating to the DB under the seller’s profile for tracking reputation.
+
+Additional Notes:
+- Use database to:
+  - Track confirmation status.
+  - Schedule follow-up rating prompts.
+  - Prevent duplicate or missed notifications.
+- Confirm that time-based checks are not relying on sleep loops. Use timestamp comparison with scheduled tasks (e.g., background loop or scheduler).
+
+---
+
+5. 📂 Final Notes for Developer
+
+- Many of these features exist but don’t work correctly.
+- ✅ Carefully read and understand all bot files and existing logic.
+- ❌ Do not add duplicate logic — fix and reuse existing structure.
+- ✅ Make all changes stable and fail-safe (especially for timezones, database access, and scheduling).
