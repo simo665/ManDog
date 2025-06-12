@@ -40,13 +40,6 @@ class ListingModal(discord.ui.Modal, title="Create Listing"):
         default="1"
     )
 
-    scheduled_time = discord.ui.TextInput(
-        label="Scheduled Time (MM/DD - HH:MM)",
-        placeholder="e.g., 06/15 - 20:00",
-        required=False,
-        max_length=50
-    )
-
     notes = discord.ui.TextInput(
         label="Additional Notes",
         placeholder="Any additional information...",
@@ -66,30 +59,6 @@ class ListingModal(discord.ui.Modal, title="Create Listing"):
 
             # Parse scheduled time
             scheduled_datetime = None
-            if self.scheduled_time.value:
-                try:
-                    # Parse MM/DD - HH:MM format
-                    time_parts = self.scheduled_time.value.strip().split(' - ')
-                    if len(time_parts) == 2:
-                        date_part = time_parts[0].strip()
-                        time_part = time_parts[1].strip()
-                        
-                        # Parse date (MM/DD)
-                        month, day = map(int, date_part.split('/'))
-                        
-                        # Parse time (HH:MM)
-                        hour, minute = map(int, time_part.split(':'))
-                        
-                        # Create datetime for current year
-                        current_year = datetime.now().year
-                        scheduled_datetime = datetime(current_year, month, day, hour, minute, tzinfo=timezone.utc)
-                        
-                        # If the date is in the past, assume next year
-                        if scheduled_datetime < datetime.now(timezone.utc):
-                            scheduled_datetime = scheduled_datetime.replace(year=current_year + 1)
-                            
-                except Exception as e:
-                    logger.warning(f"Could not parse scheduled time '{self.scheduled_time.value}': {e}")
 
             # Create listing in database
             listing_id = await self.bot.db_manager.create_listing(
@@ -191,16 +160,6 @@ class QuantityNotesModal(discord.ui.Modal, title="Listing Details"):
         super().__init__()
         self.bot = bot
         self.listing_data = listing_data
-
-        # Only show scheduled time for WTS listings
-        if listing_data['listing_type'].upper() == 'WTS':
-            self.scheduled_time = discord.ui.TextInput(
-                label="Scheduled Time (MM/DD - HH:MM)",
-                placeholder="e.g., 06/15 - 20:00",
-                required=False,
-                max_length=50
-            )
-            self.add_item(self.scheduled_time)
 
     quantity = discord.ui.TextInput(
         label="Quantity",
