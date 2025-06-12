@@ -13,31 +13,31 @@ logger = logging.getLogger(__name__)
 
 class ExpiryScheduler:
     """Handles scheduled tasks for listing expiry and reminders."""
-    
+
     def __init__(self, bot):
         self.bot = bot
         self.embeds = MarketplaceEmbeds()
-    
+
     async def check_expired_listings(self):
         """Check for expired listings and send reminders."""
         try:
             current_time = datetime.now(timezone.utc)
-            
+
             # Check for listings expiring in 24 hours (reminder)
             await self.send_expiry_reminders(current_time)
-            
+
             # Check for already expired listings
             await self.handle_expired_listings(current_time)
-            
+
         except Exception as e:
             logger.error(f"Error in expiry check: {e}")
-    
+
     async def send_expiry_reminders(self, current_time: datetime):
         """Send reminders for listings expiring soon."""
         try:
             # Get listings expiring in 24 hours
             reminder_time = current_time + timedelta(hours=24)
-            
+
             listings_to_remind = await self.bot.db_manager.execute_query(
                 """
                 SELECT l.*, u.username
@@ -49,41 +49,41 @@ class ExpiryScheduler:
                 """,
                 current_time, reminder_time
             )
-            
+
             for listing in listings_to_remind:
                 await self.send_expiry_reminder(listing)
                 await self.bot.db_manager.mark_listing_reminded(listing['id'])
-            
+
             if listings_to_remind:
                 logger.info(f"Sent {len(listings_to_remind)} expiry reminders")
-            
+
         except Exception as e:
             logger.error(f"Error sending expiry reminders: {e}")
-    
+
     async def send_expiry_reminder(self, listing: Dict[str, Any]):
         """Send expiry reminder to a user."""
         try:
             user = self.bot.get_user(listing['user_id'])
             if not user:
                 return
-            
+
             # Create reminder embed
             embed = self.create_expiry_reminder_embed(listing)
-            
+
             # Create extend button view
             view = ExtendListingView(self.bot, listing['id'])
-            
+
             await user.send(embed=embed, view=view)
-            
+
             logger.info(f"Sent expiry reminder for listing {listing['id']} to user {listing['user_id']}")
-            
+
         except Exception as e:
             logger.error(f"Error sending expiry reminder for listing {listing['id']}: {e}")
-    
+
     def create_expiry_reminder_embed(self, listing: Dict[str, Any]) -> "discord.Embed":
         """Create expiry reminder embed."""
         import discord
-        
+
         embed = discord.Embed(
             title="⏰ Listing Expiring Soon!",
             description=(
@@ -93,7 +93,7 @@ class ExpiryScheduler:
             color=self.embeds.COLORS['warning'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         embed.add_field(
             name="📂 Details",
             value=(
@@ -104,24 +104,24 @@ class ExpiryScheduler:
             ),
             inline=True
         )
-        
+
         embed.add_field(
             name="⏰ Expires",
             value=f"<t:{int(listing['expires_at'].timestamp())}:R>",
             inline=True
         )
-        
+
         if listing['notes']:
             embed.add_field(
                 name="📝 Notes",
                 value=listing['notes'][:200] + ("..." if len(listing['notes']) > 200 else ""),
                 inline=False
             )
-        
+
         embed.set_footer(text="Use the button below to extend this listing")
-        
+
         return embed
-    
+
     async def handle_expired_listings(self, current_time: datetime):
         """Handle listings that have already expired."""
         try:
@@ -136,16 +136,16 @@ class ExpiryScheduler:
                 """,
                 current_time
             )
-            
+
             for listing in expired_listings:
                 await self.expire_listing(listing)
-            
+
             if expired_listings:
                 logger.info(f"Expired {len(expired_listings)} listings")
-            
+
         except Exception as e:
             logger.error(f"Error handling expired listings: {e}")
-    
+
     async def expire_listing(self, listing: Dict[str, Any]):
         """Expire a single listing."""
         try:
@@ -154,29 +154,29 @@ class ExpiryScheduler:
                 "UPDATE listings SET active = FALSE WHERE id = $1",
                 listing['id']
             )
-            
+
             # Send expiry notification to user
             user = self.bot.get_user(listing['user_id'])
             if user:
                 embed = self.create_expiry_notification_embed(listing)
                 await user.send(embed=embed)
-            
+
             # Refresh marketplace embeds
             from bot.services.marketplace import MarketplaceService
             marketplace_service = MarketplaceService(self.bot)
             await marketplace_service.refresh_marketplace_embeds_for_zone(
                 listing['guild_id'], listing['listing_type'], listing['zone']
             )
-            
+
             logger.info(f"Expired listing {listing['id']}")
-            
+
         except Exception as e:
             logger.error(f"Error expiring listing {listing['id']}: {e}")
-    
+
     def create_expiry_notification_embed(self, listing: Dict[str, Any]) -> "discord.Embed":
         """Create expiry notification embed."""
         import discord
-        
+
         embed = discord.Embed(
             title="📋 Listing Expired",
             description=(
@@ -186,7 +186,7 @@ class ExpiryScheduler:
             color=self.embeds.COLORS['error'],
             timestamp=datetime.now(timezone.utc)
         )
-        
+
         embed.add_field(
             name="📂 Details",
             value=(
@@ -197,11 +197,11 @@ class ExpiryScheduler:
             ),
             inline=False
         )
-        
+
         embed.set_footer(text="You can create a new listing anytime using the marketplace channels")
-        
+
         return embed
-    
+
     async def extend_listing(self, listing_id: int, user_id: int, days: int = 14) -> bool:
         """Extend a listing's expiry date."""
         try:
@@ -210,50 +210,50 @@ class ExpiryScheduler:
                 "SELECT * FROM listings WHERE id = $1 AND user_id = $2 AND active = TRUE",
                 listing_id, user_id
             )
-            
+
             if not listing:
                 return False
-            
+
             listing_data = listing[0]
-            
+
             # Calculate new expiry date
             current_expiry = listing_data['expires_at']
             new_expiry = current_expiry + timedelta(days=days)
-            
+
             # Update listing
             await self.bot.db_manager.execute_command(
                 "UPDATE listings SET expires_at = $1, reminded = FALSE WHERE id = $2",
                 new_expiry, listing_id
             )
-            
+
             logger.info(f"Extended listing {listing_id} by {days} days")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error extending listing {listing_id}: {e}")
             return False
-    
+
     async def schedule_listing_activation(self, listing_id: int, activation_time: datetime):
         """Schedule a listing to become active at a specific time."""
         try:
             current_time = datetime.now(timezone.utc)
-            
+
             if activation_time <= current_time:
                 # Activate immediately
                 await self.activate_listing(listing_id)
             else:
                 # Schedule for later (this would need a more sophisticated scheduler)
                 delay = (activation_time - current_time).total_seconds()
-                
+
                 # For now, we'll store the scheduled time and check it in our regular checks
                 await self.bot.db_manager.execute_command(
                     "UPDATE listings SET scheduled_time = $1 WHERE id = $2",
                     activation_time, listing_id
                 )
-            
+
         except Exception as e:
             logger.error(f"Error scheduling listing activation: {e}")
-    
+
     async def activate_listing(self, listing_id: int):
         """Activate a scheduled listing."""
         try:
@@ -262,16 +262,16 @@ class ExpiryScheduler:
                 "UPDATE listings SET active = TRUE WHERE id = $1",
                 listing_id
             )
-            
+
             # Get listing details for refresh
             listing = await self.bot.db_manager.execute_query(
                 "SELECT guild_id, listing_type, zone FROM listings WHERE id = $1",
                 listing_id
             )
-            
+
             if listing:
                 listing_data = listing[0]
-                
+
                 # Refresh marketplace embeds
                 from bot.services.marketplace import MarketplaceService
                 marketplace_service = MarketplaceService(self.bot)
@@ -280,19 +280,19 @@ class ExpiryScheduler:
                     listing_data['listing_type'], 
                     listing_data['zone']
                 )
-            
+
             logger.info(f"Activated listing {listing_id}")
-            
+
         except Exception as e:
             logger.error(f"Error activating listing: {e}")
 
 class ExtendListingView:
     """View for extending listing expiry."""
-    
+
     def __init__(self, bot, listing_id: int):
         self.bot = bot
         self.listing_id = listing_id
-    
+
     # This would implement the Discord UI for extending listings
     # For now, we'll keep it as a placeholder class
     pass
@@ -304,6 +304,13 @@ import discord
 
 logger = logging.getLogger(__name__)
 
+async def fetch_all(query, *args):
+    """Placeholder for database fetch_all function."""
+    pass
+
+async def execute_query(query, *args):
+    """Placeholder for database execute_query function."""
+    pass
 class SchedulerService:
     """Service for handling scheduled events and notifications."""
 
@@ -314,7 +321,7 @@ class SchedulerService:
     async def start(self):
         """Start the scheduler service."""
         self.running = True
-        asyncio.create_task(self.event_loop())
+        asyncio.create_task(self.start_background_task())  # Use start_background_task
         logger.info("Scheduler service started")
 
     async def stop(self):
@@ -322,144 +329,138 @@ class SchedulerService:
         self.running = False
         logger.info("Scheduler service stopped")
 
-    async def event_loop(self):
-        """Main event loop for checking scheduled events."""
-        while self.running:
-            try:
-                await self.check_pending_events()
-                await asyncio.sleep(60)  # Check every minute
-            except Exception as e:
-                logger.error(f"Error in scheduler event loop: {e}")
-                await asyncio.sleep(60)
-
-    async def check_pending_events(self):
-        """Check for events that should trigger."""
+    async def process_expired_events(self):
+        """Process events that have reached their scheduled time"""
         try:
-            pending_events = await self.bot.db_manager.get_pending_events()
-            
-            for event in pending_events:
-                await self.trigger_event(event)
+            current_time = datetime.now(timezone.utc)
+
+            # Get expired events
+            expired_events = await fetch_all("""
+                SELECT se.*, l.user_id, l.item, l.zone, l.guild_id, l.channel_id
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.status = 'pending' 
+                  AND se.event_time <= $1
+                  AND l.active = TRUE
+            """, current_time)
+
+            for event in expired_events:
+                await self._process_single_event(event)
 
         except Exception as e:
-            logger.error(f"Error checking pending events: {e}")
+            logger.error(f"Error processing expired events: {e}")
 
-    async def trigger_event(self, event: Dict[str, Any]):
-        """Trigger a scheduled event."""
+    async def _process_single_event(self, event):
+        """Process a single expired event"""
         try:
-            listing_id = event['listing_id']
-            guild_id = event['guild_id']
-            seller_id = event['user_id']
-            item_name = event['item']
-            zone = event['zone']
+            # Step 1: Delete item from seller's listing (embed + database)
+            await execute_query(
+                "UPDATE listings SET active = FALSE WHERE id = $1",
+                event['listing_id']
+            )
 
-            # Mark event as started
-            await self.bot.db_manager.execute_command(
-                "UPDATE scheduled_events SET status = 'started' WHERE id = $1",
+            # Update event status
+            await execute_query(
+                "UPDATE scheduled_events SET status = 'triggered' WHERE id = $1",
                 event['id']
             )
 
-            # Deactivate the listing
-            await self.bot.db_manager.execute_command(
-                "UPDATE listings SET active = FALSE WHERE id = $1",
-                listing_id
+            # Step 2: Notify seller and queued buyers
+            await self._send_event_notifications(event)
+
+        except Exception as e:
+            logger.error(f"Error processing event {event['id']}: {e}")
+
+    async def _send_event_notifications(self, event):
+        """Send notifications to seller and buyers"""
+        try:
+            from bot.client import bot
+
+            # Get queued buyers
+            buyers = await fetch_all(
+                "SELECT user_id FROM queue WHERE listing_id = $1 AND status = 'active'",
+                event['listing_id']
             )
-
-            # Get guild and create notification
-            guild = self.bot.get_guild(guild_id)
-            if not guild:
-                logger.warning(f"Guild {guild_id} not found for event")
-                return
-
-            # Get queue participants
-            queue_data = await self.bot.db_manager.get_listing_queues(listing_id)
-            participants = []
-            for item_queues in queue_data.values():
-                participants.extend(item_queues)
 
             # Create confirmation view
-            from bot.ui.views_ordering import OrderConfirmationView
-            view = OrderConfirmationView(self.bot, event['id'], seller_id, participants)
+            from bot.ui.views import EventConfirmationView
+            confirmation_view = EventConfirmationView(event['listing_id'], event['item'])
 
-            # Create notification embed
-            embed = discord.Embed(
-                title="🔔 Event Started",
-                description=f"The event for **{item_name}** in **{zone.title()}** has started!\n\nPlease confirm your participation.",
-                color=0xFFAA00,
-                timestamp=datetime.now(timezone.utc)
-            )
-
-            # Send notifications to seller
+            # Send to seller
             try:
-                seller = guild.get_member(seller_id)
-                if seller:
-                    await seller.send(embed=embed, view=view)
-            except discord.Forbidden:
-                logger.warning(f"Could not DM seller {seller_id}")
+                seller = await bot.fetch_user(event['user_id'])
+                await seller.send(
+                    f"⏳ The event for **{event['item']}** has started. Please confirm your participation.",
+                    view=confirmation_view
+                )
+            except:
+                pass
 
-            # Send notifications to queue participants
-            for participant_id in participants:
+            # Send to buyers
+            for buyer in buyers:
                 try:
-                    participant = guild.get_member(participant_id)
-                    if participant:
-                        await participant.send(embed=embed, view=view)
-                except discord.Forbidden:
-                    logger.warning(f"Could not DM participant {participant_id}")
-
-            # Schedule rating prompt (1 hour later)
-            asyncio.create_task(self.schedule_rating_prompt(event['id'], 3600))  # 1 hour
-
-            logger.info(f"Triggered event {event['id']} for listing {listing_id}")
+                    user = await bot.fetch_user(buyer['user_id'])
+                    await user.send(
+                        f"⏳ The event for **{event['item']}** has started. Please confirm your participation.",
+                        view=confirmation_view
+                    )
+                except:
+                    pass
 
         except Exception as e:
-            logger.error(f"Error triggering event {event['id']}: {e}")
+            logger.error(f"Error sending notifications for event {event['id']}: {e}")
 
-    async def schedule_rating_prompt(self, event_id: int, delay_seconds: int):
-        """Schedule rating prompt after delay."""
+    async def process_confirmations(self):
+        """Process confirmations and start rating timers"""
         try:
-            await asyncio.sleep(delay_seconds)
-            
-            # Get event details
-            event_data = await self.bot.db_manager.execute_query(
-                """
-                SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
-                FROM scheduled_events se
-                JOIN listings l ON se.listing_id = l.id
-                WHERE se.id = $1
-                """,
-                event_id
+            current_time = datetime.now(timezone.utc)
+
+            # Get confirmations ready for rating (1 hour after confirmation)
+            ready_for_rating = await fetch_all("""
+                SELECT ec.*, l.user_id as seller_id, l.item
+                FROM event_confirmations ec
+                JOIN listings l ON ec.listing_id = l.id
+                WHERE ec.status = 'confirmed' 
+                  AND ec.rating_time <= $1
+                  AND ec.rating_sent = FALSE
+            """, current_time)
+
+            for confirmation in ready_for_rating:
+                await self._send_rating_prompt(confirmation)
+
+        except Exception as e:
+            logger.error(f"Error processing confirmations: {e}")
+
+    async def _send_rating_prompt(self, confirmation):
+        """Send rating prompt to buyer"""
+        try:
+            from bot.client import bot
+            from bot.ui.views import RatingView
+
+            user = await bot.fetch_user(confirmation['user_id'])
+            rating_view = RatingView(confirmation['listing_id'], confirmation['seller_id'])
+
+            await user.send(
+                f"Please rate your experience with the seller for **{confirmation['item']}** (1-5 stars):",
+                view=rating_view
             )
 
-            if not event_data:
-                return
-
-            event = event_data[0]
-            
-            # Get confirmed participants
-            participants = event.get('participants', [])
-            if isinstance(participants, str):
-                import json
-                participants = json.loads(participants)
-
-            # Send rating prompts
-            from bot.ui.views_ordering import RatingView
-            
-            for participant_id in participants:
-                try:
-                    guild = self.bot.get_guild(event['guild_id'])
-                    if guild:
-                        participant = guild.get_member(participant_id)
-                        if participant:
-                            view = RatingView(self.bot, event['seller_id'], event['listing_id'])
-                            
-                            embed = discord.Embed(
-                                title="⭐ Rate Your Experience",
-                                description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
-                                color=0x3B82F6
-                            )
-                            
-                            await participant.send(embed=embed, view=view)
-                except Exception as e:
-                    logger.error(f"Error sending rating prompt to {participant_id}: {e}")
+            # Mark rating as sent
+            await execute_query(
+                "UPDATE event_confirmations SET rating_sent = TRUE WHERE id = $1",
+                confirmation['id']
+            )
 
         except Exception as e:
-            logger.error(f"Error in rating prompt schedule: {e}")
+            logger.error(f"Error sending rating prompt: {e}")
+
+    async def start_background_task(self):
+        """Start the background task for processing scheduled events"""
+        while True:
+            try:
+                await self.process_expired_events()
+                await self.process_confirmations()
+                await asyncio.sleep(60)  # Check every minute
+            except Exception as e:
+                logger.error(f"Error in scheduler background task: {e}")
+                await asyncio.sleep(60)
