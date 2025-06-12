@@ -704,7 +704,7 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error cleaning up guild data: {e}")
 
-    async def set_user_timezone(self, user_id: int, timezone: str) -> bool:
+    async def set_user_timezone(self, user_id: int, timezone_str: str) -> bool:
         """Set user's timezone."""
         try:
             await self.ensure_user_exists(user_id)
@@ -713,7 +713,7 @@ class DatabaseManager:
                 SET timezone = $1, updated_at = $2
                 WHERE user_id = $3
             """
-            await self.execute_command(command, timezone, datetime.now(timezone.utc), user_id)
+            await self.execute_command(command, timezone_str, datetime.now(timezone.utc), user_id)
             return True
         except Exception as e:
             logger.error(f"Error setting user timezone: {e}")
