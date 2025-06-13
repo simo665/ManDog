@@ -401,6 +401,258 @@ class RatingView(discord.ui.View):
         super().__init__(timeout=300)
         self.bot = bot
 
+class EventConfirmationView(discord.ui.View):
+    """View for event participation confirmation."""
+
+    def __init__(self, bot, event_id: int, role: str, user_id: int):
+        super().__init__(timeout=3600)  # 1 hour timeout
+        self.bot = bot
+        self.event_id = event_id
+        self.role = role
+        self.user_id = user_id
+
+    @discord.ui.button(label="✅ Confirm Participation", style=discord.ButtonStyle.green)
+    async def confirm_participation(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle participation confirmation."""
+        try:
+            await interaction.response.defer()
+
+            # Store confirmation in database
+            success = await self.store_event_confirmation(interaction.user.id, True)
+
+            if success:
+                embed = discord.Embed(
+                    title="✅ Participation Confirmed",
+                    description="You have confirmed your participation in this event. Please wait for other participants.",
+                    color=0x00FF00,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+
+                # If this is a buyer confirmation, start the rating timer
+                if self.role == "buyer":
+                    import asyncio
+                    asyncio.create_task(self.schedule_rating_for_user(interaction.user.id))
+
+            else:
+                await interaction.followup.send("❌ Failed to confirm participation. Please try again.", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error confirming participation: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(label="❌ Decline Participation", style=discord.ButtonStyle.red)
+    async def decline_participation(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle participation decline."""
+        try:
+            await interaction.response.defer()
+
+            # Store decline in database
+            success = await self.store_event_confirmation(interaction.user.id, False)
+
+            if success:
+                embed = discord.Embed(
+                    title="❌ Participation Declined",
+                    description="You have declined to participate in this event.",
+                    color=0xFF0000,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+            else:
+                await interaction.followup.send("❌ Failed to decline participation. Please try again.", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error declining participation: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+    async def store_event_confirmation(self, user_id: int, confirmed: bool) -> bool:
+        """Store event confirmation in database."""
+        try:
+            await self.bot.db_manager.execute_command(
+                """
+                INSERT INTO event_confirmations (event_id, user_id, role, confirmed, created_at)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (event_id, user_id) 
+                DO UPDATE SET confirmed = $4, created_at = $5
+                """,
+                self.event_id, user_id, self.role, confirmed, datetime.now(timezone.utc)
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error storing event confirmation: {e}")
+            return False
+
+    async def schedule_rating_for_user(self, user_id: int):
+        """Schedule rating prompt for this specific user after 1 hour."""
+        try:
+            import asyncio
+            await asyncio.sleep(3600)  # 1 hour
+
+            # Get event details
+            event_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.id = $1
+                """,
+                self.event_id
+            )
+
+            if not event_data:
+                return
+
+            event = event_data[0]
+
+            # Send rating prompt to this specific user
+            from bot.ui.views_ordering import EventRatingView
+            
+            guild = self.bot.get_guild(event['guild_id'])
+            if guild:
+                user = guild.get_member(user_id)
+                if user:
+                    view = EventRatingView(self.bot, self.event_id, event['seller_id'])
+                    
+                    embed = discord.Embed(
+                        title="⭐ Rate Your Experience",
+                        description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
+                        color=0x3B82F6
+                    )
+                    
+                    await user.send(embed=embed, view=view)
+                    logger.info(f"Sent individual rating prompt to user {user_id}")
+
+        except Exception as e:
+            logger.error(f"Error in individual rating schedule: {e}")
+
+class EventRatingView(discord.ui.View):
+    """View for rating event seller."""
+
+    def __init__(self, bot, event_id: int, seller_id: int):
+        super().__init__(timeout=7200)  # 2 hour timeout
+        self.bot = bot
+        self.event_id = event_id
+        self.seller_id = seller_id
+
+    @discord.ui.button(label="⭐ 1 Star", style=discord.ButtonStyle.danger, row=0)
+    async def rate_1_star(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_rating(interaction, 1)
+
+    @discord.ui.button(label="⭐⭐ 2 Stars", style=discord.ButtonStyle.danger, row=0)
+    async def rate_2_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_rating(interaction, 2)
+
+    @discord.ui.button(label="⭐⭐⭐ 3 Stars", style=discord.ButtonStyle.secondary, row=0)
+    async def rate_3_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_rating(interaction, 3)
+
+    @discord.ui.button(label="⭐⭐⭐⭐ 4 Stars", style=discord.ButtonStyle.success, row=1)
+    async def rate_4_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_rating(interaction, 4)
+
+    @discord.ui.button(label="⭐⭐⭐⭐⭐ 5 Stars", style=discord.ButtonStyle.success, row=1)
+    async def rate_5_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_rating(interaction, 5)
+
+    async def handle_rating(self, interaction: discord.Interaction, rating: int):
+        """Handle star rating selection."""
+        try:
+            # Open modal for optional comment
+            modal = EventRatingModal(self.bot, self.event_id, self.seller_id, rating)
+            await interaction.response.send_modal(modal)
+
+        except Exception as e:
+            logger.error(f"Error handling event rating: {e}")
+            try:
+                await interaction.response.send_message("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+class EventRatingModal(discord.ui.Modal):
+    """Modal for submitting event ratings."""
+
+    def __init__(self, bot, event_id: int, seller_id: int, rating: int):
+        stars = "⭐" * rating
+        super().__init__(title=f"Rate {rating}/5 Stars")
+        self.bot = bot
+        self.event_id = event_id
+        self.seller_id = seller_id
+        self.rating = rating
+
+        # Comment input
+        self.comment_input = discord.ui.TextInput(
+            label=f"Comment for {stars} rating (optional)",
+            placeholder="Share your experience with this seller...",
+            style=discord.TextStyle.paragraph,
+            min_length=0,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.comment_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle rating submission."""
+        try:
+            comment = self.comment_input.value.strip()
+
+            await interaction.response.defer()
+
+            # Store rating in database
+            success = await self.bot.db_manager.execute_command(
+                """
+                INSERT INTO event_ratings (event_id, rater_id, seller_id, rating, comment, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (event_id, rater_id) DO NOTHING
+                """,
+                self.event_id, interaction.user.id, self.seller_id, self.rating, comment, datetime.now(timezone.utc)
+            )
+
+            if success:
+                # Update seller's reputation
+                await self.bot.db_manager.add_reputation(
+                    interaction.user.id, self.seller_id, None, self.rating, comment
+                )
+
+                stars = "⭐" * self.rating
+                if self.rating < 3:
+                    await interaction.followup.send(
+                        f"⚠️ Your {stars} rating has been submitted for admin review due to the low score.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"✅ Thank you for your {stars} rating! It has been recorded.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.followup.send(
+                    "❌ You have already rated this event or an error occurred.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            logger.error(f"Error submitting event rating: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
 class TradeRatingView(discord.ui.View):
     """View for trade rating buttons."""
 

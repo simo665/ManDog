@@ -376,23 +376,27 @@ class SchedulerService:
             for item_queues in queue_data.values():
                 participants.extend(item_queues)
 
-            # Create confirmation view
-            from bot.ui.views_ordering import OrderConfirmationView
-            view = OrderConfirmationView(self.bot, event['id'], seller_id, participants)
+            # First, remove the item from the seller's listing and refresh embed
+            await self.remove_item_from_listing(listing_id, item_name, guild_id, zone)
 
             # Create notification embed
             embed = discord.Embed(
-                title="🔔 Event Started",
+                title="⏳ Event Started",
                 description=f"The event for **{item_name}** in **{zone.title()}** has started!\n\nPlease confirm your participation.",
                 color=0xFFAA00,
                 timestamp=datetime.now(timezone.utc)
             )
 
-            # Send notifications to seller
+            # Create confirmation view for each participant
+            from bot.ui.views_ordering import EventConfirmationView
+            
+            # Send notification to seller
             try:
                 seller = guild.get_member(seller_id)
                 if seller:
-                    await seller.send(embed=embed, view=view)
+                    seller_view = EventConfirmationView(self.bot, event['id'], "seller", seller_id)
+                    await seller.send(embed=embed, view=seller_view)
+                    logger.info(f"Sent event notification to seller {seller_id}")
             except discord.Forbidden:
                 logger.warning(f"Could not DM seller {seller_id}")
 
@@ -401,17 +405,50 @@ class SchedulerService:
                 try:
                     participant = guild.get_member(participant_id)
                     if participant:
-                        await participant.send(embed=embed, view=view)
+                        participant_view = EventConfirmationView(self.bot, event['id'], "buyer", participant_id)
+                        await participant.send(embed=embed, view=participant_view)
+                        logger.info(f"Sent event notification to participant {participant_id}")
                 except discord.Forbidden:
                     logger.warning(f"Could not DM participant {participant_id}")
-
-            # Schedule rating prompt (1 hour later)
-            asyncio.create_task(self.schedule_rating_prompt(event['id'], 3600))  # 1 hour
 
             logger.info(f"Triggered event {event['id']} for listing {listing_id}")
 
         except Exception as e:
             logger.error(f"Error triggering event {event['id']}: {e}")
+
+    async def remove_item_from_listing(self, listing_id: int, item_name: str, guild_id: int, zone: str):
+        """Remove item from listing and refresh marketplace embed."""
+        try:
+            # Get listing info first
+            listing_info = await self.bot.db_manager.execute_query(
+                "SELECT listing_type, zone FROM listings WHERE id = $1",
+                listing_id
+            )
+            
+            if not listing_info:
+                logger.warning(f"Listing {listing_id} not found")
+                return
+                
+            listing_data = listing_info[0]
+            listing_type = listing_data['listing_type']
+            
+            # Mark listing as inactive (remove from marketplace)
+            await self.bot.db_manager.execute_command(
+                "UPDATE listings SET active = FALSE WHERE id = $1",
+                listing_id
+            )
+            
+            # Refresh marketplace embeds to show the item is removed
+            from bot.services.marketplace import MarketplaceService
+            marketplace_service = MarketplaceService(self.bot)
+            await marketplace_service.refresh_marketplace_embeds_for_zone(
+                guild_id, listing_type, zone
+            )
+            
+            logger.info(f"Removed listing {listing_id} for item {item_name} and refreshed embeds")
+            
+        except Exception as e:
+            logger.error(f"Error removing item from listing: {e}")
 
     async def schedule_rating_prompt(self, event_id: int, delay_seconds: int):
         """Schedule rating prompt after delay."""
@@ -434,22 +471,26 @@ class SchedulerService:
 
             event = event_data[0]
             
-            # Get confirmed participants
-            participants = event.get('participants', [])
-            if isinstance(participants, str):
-                import json
-                participants = json.loads(participants)
+            # Get confirmed participants from database
+            confirmed_participants = await self.bot.db_manager.execute_query(
+                """
+                SELECT user_id FROM event_confirmations 
+                WHERE event_id = $1 AND confirmed = TRUE AND role = 'buyer'
+                """,
+                event_id
+            )
 
-            # Send rating prompts
-            from bot.ui.views_ordering import RatingView
+            # Send rating prompts to confirmed buyers only
+            from bot.ui.views_ordering import EventRatingView
             
-            for participant_id in participants:
+            for participant_data in confirmed_participants:
+                participant_id = participant_data['user_id']
                 try:
                     guild = self.bot.get_guild(event['guild_id'])
                     if guild:
                         participant = guild.get_member(participant_id)
                         if participant:
-                            view = RatingView(self.bot, event['seller_id'], event['listing_id'])
+                            view = EventRatingView(self.bot, event_id, event['user_id'])
                             
                             embed = discord.Embed(
                                 title="⭐ Rate Your Experience",
@@ -458,6 +499,7 @@ class SchedulerService:
                             )
                             
                             await participant.send(embed=embed, view=view)
+                            logger.info(f"Sent rating prompt to participant {participant_id}")
                 except Exception as e:
                     logger.error(f"Error sending rating prompt to {participant_id}: {e}")
 

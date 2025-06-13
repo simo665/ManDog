@@ -222,6 +222,36 @@ class DatabaseSchema:
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
             );
+        """,
+        
+        'event_confirmations': """
+            CREATE TABLE IF NOT EXISTS event_confirmations (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                role VARCHAR(10) NOT NULL CHECK (role IN ('seller', 'buyer')),
+                confirmed BOOLEAN NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (event_id) REFERENCES scheduled_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                UNIQUE(event_id, user_id)
+            );
+        """,
+        
+        'event_ratings': """
+            CREATE TABLE IF NOT EXISTS event_ratings (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                rater_id BIGINT NOT NULL,
+                seller_id BIGINT NOT NULL,
+                rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (event_id) REFERENCES scheduled_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (rater_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                UNIQUE(event_id, rater_id)
+            );
         """
     }
     
