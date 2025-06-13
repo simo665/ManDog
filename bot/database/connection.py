@@ -328,6 +328,9 @@ class DatabaseManager:
     async def add_to_queue(self, listing_id: int, user_id: int, item_name: str) -> bool:
         """Add a user to the queue for a specific item."""
         try:
+            # Ensure user exists in users table first
+            await self.ensure_user_exists(user_id)
+
             # Check if the user is the listing owner
             listing_owner = await self.execute_query(
                 "SELECT user_id FROM listings WHERE id = $1",
