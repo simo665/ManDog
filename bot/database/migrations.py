@@ -81,6 +81,7 @@ class MigrationManager:
             7: self.add_listing_queues_table,
             8: self.add_items_table,
             9: self.add_scheduled_events_table,
+            10: self.add_event_confirmations_table,
         }
 
     async def migration_001_initial_schema(self):
@@ -223,6 +224,28 @@ class MigrationManager:
         """)
         
         logger.info("Scheduled events table created successfully")
+
+    async def add_event_confirmations_table(self):
+        """Add event_confirmations table for event participation tracking."""
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS event_confirmations (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                user_id BIGINT NOT NULL,
+                role VARCHAR(10) NOT NULL CHECK (role IN ('seller', 'buyer')),
+                confirmed BOOLEAN NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (event_id) REFERENCES scheduled_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                UNIQUE(event_id, user_id)
+            )
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_event_confirmations_event ON event_confirmations(event_id)
+        """)
+        
+        logger.info("Event confirmations table created successfully")
 
     async def populate_items_table(self):
         """Populate items table with initial marketplace data."""
