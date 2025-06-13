@@ -27,7 +27,7 @@ class MandokBot(commands.Bot):
     async def setup_hook(self):
         """Called when the bot is starting up."""
         logger.info("Setting up bot...")
-        
+
         # Initialize database manager
         self.db_manager = DatabaseManager()
         await self.db_manager.initialize()
@@ -53,7 +53,7 @@ class MandokBot(commands.Bot):
             logger.info("Added MarketplaceCommands cog")
         else:
             logger.warning("MarketplaceCommands cog already loaded.")
-            
+
         # Start background tasks only if not already running
         if not self.expiry_check.is_running():
             self.expiry_check.start()

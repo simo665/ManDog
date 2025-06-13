@@ -5,8 +5,9 @@ Discord UI Views for the ordering system.
 import discord
 from discord.ext import commands
 import logging
-from typing import Optional
 from datetime import datetime, timezone
+from typing import Optional
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -434,11 +435,6 @@ class EventConfirmationView(discord.ui.View):
 
                 await interaction.edit_original_response(embed=embed, view=self)
 
-                # If this is a buyer confirmation, start the rating timer
-                if self.role == "buyer":
-                    import asyncio
-                    asyncio.create_task(self.schedule_rating_for_user(interaction.user.id))
-
             else:
                 await interaction.followup.send("❌ Failed to confirm participation. Please try again.", ephemeral=True)
 
@@ -497,49 +493,6 @@ class EventConfirmationView(discord.ui.View):
         except Exception as e:
             logger.error(f"Error storing event confirmation: {e}")
             return False
-
-    async def schedule_rating_for_user(self, user_id: int):
-        """Schedule rating prompt for this specific user after 1 hour."""
-        try:
-            import asyncio
-            await asyncio.sleep(3600)  # 1 hour
-
-            # Get event details
-            event_data = await self.bot.db_manager.execute_query(
-                """
-                SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
-                FROM scheduled_events se
-                JOIN listings l ON se.listing_id = l.id
-                WHERE se.id = $1
-                """,
-                self.event_id
-            )
-
-            if not event_data:
-                return
-
-            event = event_data[0]
-
-            # Send rating prompt to this specific user
-            from bot.ui.views_ordering import EventRatingView
-            
-            guild = self.bot.get_guild(event['guild_id'])
-            if guild:
-                user = guild.get_member(user_id)
-                if user:
-                    view = EventRatingView(self.bot, self.event_id, event['seller_id'])
-                    
-                    embed = discord.Embed(
-                        title="⭐ Rate Your Experience",
-                        description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
-                        color=0x3B82F6
-                    )
-                    
-                    await user.send(embed=embed, view=view)
-                    logger.info(f"Sent individual rating prompt to user {user_id}")
-
-        except Exception as e:
-            logger.error(f"Error in individual rating schedule: {e}")
 
 class EventRatingView(discord.ui.View):
     """View for rating event seller."""

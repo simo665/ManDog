@@ -450,12 +450,98 @@ class SchedulerService:
         except Exception as e:
             logger.error(f"Error removing item from listing: {e}")
 
-    async def schedule_rating_prompt(self, event_id: int, delay_seconds: int):
+    async def schedule_rating_prompt(self, event_id: int, delay_seconds: int = 10):
         """Schedule rating prompt after delay."""
         try:
-            await asyncio.sleep(10)
+            await asyncio.sleep(delay_seconds)
             
             # Get event details
+            event_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.id = $1
+                """,
+                event_id
+            )
+
+            if not event_data:
+                logger.warning(f"No event data found for event_id {event_id}")
+                return
+
+            event = event_data[0]
+            
+            # Get confirmed participants from database
+            confirmed_participants = await self.bot.db_manager.execute_query(
+                """
+                SELECT user_id FROM event_confirmations 
+                WHERE event_id = $1 AND confirmed = TRUE AND role = 'buyer'
+                """,
+                event_id
+            )
+
+            if not confirmed_participants:
+                logger.info(f"No confirmed participants found for event {event_id}")
+                return
+
+            # Send rating prompts to confirmed buyers only
+            from bot.ui.views_ordering import EventRatingView
+            
+            logger.info(f"Sending rating prompts to {len(confirmed_participants)} confirmed participants")
+            
+            for participant_data in confirmed_participants:
+                participant_id = participant_data['user_id']
+                try:
+                    guild = self.bot.get_guild(event['guild_id'])
+                    if guild:
+                        participant = guild.get_member(participant_id)
+                        if participant:
+                            view = EventRatingView(self.bot, event_id, event['seller_id'])
+                            
+                            embed = discord.Embed(
+                                title="⭐ Rate Your Experience",
+                                description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
+                                color=0x3B82F6,
+                                timestamp=datetime.now(timezone.utc)
+                            )
+                            
+                            embed.add_field(
+                                name="Seller",
+                                value=f"<@{event['seller_id']}>",
+                                inline=True
+                            )
+                            
+                            embed.add_field(
+                                name="Item",
+                                value=event['item'],
+                                inline=True
+                            )
+                            
+                            embed.add_field(
+                                name="Zone",
+                                value=event['zone'].title(),
+                                inline=True
+                            )
+                            
+                            embed.set_footer(text="Your rating helps the community!")
+                            
+                            await participant.send(embed=embed, view=view)
+                            logger.info(f"Sent rating prompt to participant {participant_id}")
+                        else:
+                            logger.warning(f"Could not find member {participant_id} in guild")
+                    else:
+                        logger.warning(f"Could not find guild {event['guild_id']}")
+                except Exception as e:
+                    logger.error(f"Error sending rating prompt to {participant_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error in rating prompt schedule: {e}")
+
+    async def check_ratings_complete_and_send_summary(self, event_id: int):
+        """Check if all ratings are complete and send summary to mods channel."""
+        try:
+            # Get event and confirmed participants
             event_data = await self.bot.db_manager.execute_query(
                 """
                 SELECT se.*, l.user_id as seller_id, l.item, l.zone, l.guild_id
@@ -471,7 +557,7 @@ class SchedulerService:
 
             event = event_data[0]
             
-            # Get confirmed participants from database
+            # Get confirmed participants
             confirmed_participants = await self.bot.db_manager.execute_query(
                 """
                 SELECT user_id FROM event_confirmations 
@@ -480,28 +566,106 @@ class SchedulerService:
                 event_id
             )
 
-            # Send rating prompts to confirmed buyers only
-            from bot.ui.views_ordering import EventRatingView
-            
-            for participant_data in confirmed_participants:
-                participant_id = participant_data['user_id']
-                try:
-                    guild = self.bot.get_guild(event['guild_id'])
-                    if guild:
-                        participant = guild.get_member(participant_id)
-                        if participant:
-                            view = EventRatingView(self.bot, event_id, event['user_id'])
-                            
-                            embed = discord.Embed(
-                                title="⭐ Rate Your Experience",
-                                description=f"Please rate your experience with the **{event['item']}** event in **{event['zone'].title()}**",
-                                color=0x3B82F6
-                            )
-                            
-                            await participant.send(embed=embed, view=view)
-                            logger.info(f"Sent rating prompt to participant {participant_id}")
-                except Exception as e:
-                    logger.error(f"Error sending rating prompt to {participant_id}: {e}")
+            # Get submitted ratings
+            submitted_ratings = await self.bot.db_manager.execute_query(
+                """
+                SELECT rater_id, rating, comment, created_at 
+                FROM event_ratings 
+                WHERE event_id = $1
+                """,
+                event_id
+            )
+
+            confirmed_count = len(confirmed_participants)
+            ratings_count = len(submitted_ratings)
+
+            # Check if all ratings are submitted
+            if ratings_count >= confirmed_count and confirmed_count > 0:
+                await self.send_rating_summary(event, submitted_ratings)
 
         except Exception as e:
-            logger.error(f"Error in rating prompt schedule: {e}")
+            logger.error(f"Error checking ratings completion: {e}")
+
+    async def send_rating_summary(self, event: dict, ratings: list):
+        """Send rating summary to mods channel."""
+        try:
+            guild_id = event['guild_id']
+            
+            # Get the logs/rates channel
+            channel_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT admin_channel_id FROM guild_rating_configs 
+                WHERE guild_id = $1
+                """,
+                guild_id
+            )
+
+            if not channel_data or not channel_data[0]['admin_channel_id']:
+                logger.info(f"No mods channel configured for guild {guild_id}, skipping summary")
+                return
+
+            channel_id = channel_data[0]['admin_channel_id']
+            guild = self.bot.get_guild(guild_id)
+            
+            if not guild:
+                logger.warning(f"Could not find guild {guild_id}")
+                return
+
+            channel = guild.get_channel(channel_id)
+            if not channel:
+                logger.warning(f"Could not find channel {channel_id}")
+                return
+
+            # Calculate average rating
+            total_rating = sum(r['rating'] for r in ratings)
+            avg_rating = total_rating / len(ratings) if ratings else 0
+            
+            # Create summary embed
+            embed = discord.Embed(
+                title="📊 Trade Rating Summary",
+                description=f"Event ratings have been collected for **{event['item']}** in **{event['zone'].title()}**",
+                color=0x00FF00,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(
+                name="🛒 Seller",
+                value=f"<@{event['seller_id']}>",
+                inline=True
+            )
+
+            embed.add_field(
+                name="⭐ Average Rating",
+                value=f"{avg_rating:.1f}/5 ({'⭐' * int(avg_rating)})",
+                inline=True
+            )
+
+            embed.add_field(
+                name="📊 Total Ratings",
+                value=str(len(ratings)),
+                inline=True
+            )
+
+            # Add buyer ratings
+            buyers_text = ""
+            for rating_data in ratings:
+                rating_stars = "⭐" * rating_data['rating']
+                buyers_text += f"<@{rating_data['rater_id']}>: {rating_stars} ({rating_data['rating']}/5)\n"
+                if rating_data['comment']:
+                    buyers_text += f"💬 *{rating_data['comment'][:100]}{'...' if len(rating_data['comment']) > 100 else ''}*\n"
+                buyers_text += "\n"
+
+            if buyers_text:
+                embed.add_field(
+                    name="🛍️ Buyer Ratings",
+                    value=buyers_text[:1024],
+                    inline=False
+                )
+
+            embed.set_footer(text="Event rating summary")
+
+            await channel.send(embed=embed)
+            logger.info(f"Sent rating summary to channel {channel_id}")
+
+        except Exception as e:
+            logger.error(f"Error sending rating summary: {e}")
