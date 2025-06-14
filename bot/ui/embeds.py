@@ -90,51 +90,71 @@ class MarketplaceEmbeds:
                             grouped_listings[monster] = []
                         grouped_listings[monster].append(listing)
 
-                    # Create fields for each monster group
+                    # Create fields for each monster group with item limits
                     for monster, monster_listings in grouped_listings.items():
-                        # Header with monster name and total item count
-                        field_name = f"📂 {monster} ({len(monster_listings)} item{'s' if len(monster_listings) > 1 else ''})"
+                        # Split monster listings into chunks of 4 items max
+                        max_items_per_field = 4
+                        chunks = [monster_listings[i:i + max_items_per_field] 
+                                for i in range(0, len(monster_listings), max_items_per_field)]
                         
-                        # Build the field value with all items for this monster
-                        field_parts = []
-                        for i, listing in enumerate(monster_listings):
-                            # Format timestamp
-                            time_str = "No time set"
-                            if listing.get('scheduled_time'):
-                                timestamp = int(listing['scheduled_time'].timestamp())
-                                time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
+                        for chunk_index, chunk in enumerate(chunks):
+                            # Create field name based on chunk
+                            if len(chunks) == 1:
+                                # Single chunk - show total count
+                                field_name = f"📂 {monster} ({len(monster_listings)} item{'s' if len(monster_listings) > 1 else ''})"
+                            else:
+                                # Multiple chunks - show part number
+                                if chunk_index == 0:
+                                    field_name = f"📂 {monster} ({len(chunk)} item{'s' if len(chunk) > 1 else ''})"
+                                else:
+                                    field_name = f"📂 {monster} (part {chunk_index + 1}) – ({len(chunk)} item{'s' if len(chunk) > 1 else ''})"
+                            
+                            # Build the field value for this chunk
+                            field_parts = []
+                            for listing in chunk:
+                                # Format timestamp
+                                time_str = "No time set"
+                                if listing.get('scheduled_time'):
+                                    timestamp = int(listing['scheduled_time'].timestamp())
+                                    time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
 
-                            # Format queue information
-                            queue_str = "No queue"
-                            if 'queues' in listing and listing['queues']:
-                                queue_users = []
-                                for item_name, users in listing['queues'].items():
-                                    for user_id in users:
-                                        queue_users.append(f"<@{user_id}>")
-                                if queue_users:
-                                    queue_str = " • ".join(queue_users)
+                                # Format queue information
+                                queue_str = "No queue"
+                                if 'queues' in listing and listing['queues']:
+                                    queue_users = []
+                                    for item_name, users in listing['queues'].items():
+                                        for user_id in users:
+                                            queue_users.append(f"<@{user_id}>")
+                                    if queue_users:
+                                        queue_str = " • ".join(queue_users)
 
-                            # Notes
-                            notes_str = listing.get('notes', '').strip() or "No notes."
+                                # Notes - truncate if too long
+                                notes_str = listing.get('notes', '').strip() or "No notes."
+                                if len(notes_str) > 100:
+                                    notes_str = notes_str[:97] + "..."
 
-                            # Format this item
-                            item_text = (
-                                f"> 📦 Item: \n"
-                                f"> ╰┈➤ {listing['item']} by <@{listing['user_id']}>\n"
-                                f"> ⏰ Time: {time_str}\n"
-                                f"> 📝 Notes: {notes_str}\n"
-                                f"> 👥 Queue: {queue_str}"
+                                # Format this item
+                                item_text = (
+                                    f"> 📦 Item: \n"
+                                    f"> ╰┈➤ {listing['item']} by <@{listing['user_id']}>\n"
+                                    f"> ⏰ Time: {time_str}\n"
+                                    f"> 📝 Notes: {notes_str}\n"
+                                    f"> 👥 Queue: {queue_str}"
+                                )
+                                field_parts.append(item_text)
+
+                            # Join items in this chunk with separator
+                            field_value = "\n· · ─ ·✶· ─ · ·\n".join(field_parts)
+                            
+                            # Safety check - if field is still too long, truncate
+                            if len(field_value) > 1020:
+                                field_value = field_value[:1017] + "..."
+                            
+                            embed.add_field(
+                                name=field_name,
+                                value=field_value,
+                                inline=False
                             )
-                            field_parts.append(item_text)
-
-                        # Join all items with separator
-                        field_value = "\n· · ─ ·✶· ─ · ·\n".join(field_parts)
-                        
-                        embed.add_field(
-                            name=field_name,
-                            value=field_value,
-                            inline=False
-                        )
                 else:
                     # WTB format (unchanged) - process individually
                     for i, listing in enumerate(page_listings, start_idx + 1):
