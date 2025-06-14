@@ -910,24 +910,32 @@ class QueueSearchModal(discord.ui.Modal, title="Search Items"):
     async def on_submit(self, interaction: discord.Interaction):
         """Handle search submission."""
         try:
-            search_results = await self.bot.db_manager.search_items(
-                self.zone, self.search_term.value
+            # Search only in active WTS listings for this zone
+            search_results = await self.bot.db_manager.execute_query(
+                """
+                SELECT DISTINCT item 
+                FROM listings 
+                WHERE guild_id = $1 AND zone = $2 AND listing_type = 'WTS' AND active = TRUE 
+                AND LOWER(item) LIKE LOWER($3)
+                ORDER BY item
+                """,
+                interaction.guild.id, self.zone, f"%{self.search_term.value}%"
             )
 
             if not search_results:
                 await interaction.response.send_message(
-                    f"❌ No items found matching '{self.search_term.value}' in {self.zone.title()}",
+                    f"❌ No active WTS listings found matching '{self.search_term.value}' in {self.zone.title()}",
                     ephemeral=True
                 )
                 return
 
             # Show search results
-            items = [result['item_name'] for result in search_results]
+            items = [result['item'] for result in search_results]
             view = QueueSelectView(self.bot, [], self.zone, items)
 
             embed = discord.Embed(
                 title="🔍 Search Results",
-                description=f"Found {len(items)} item(s) matching '{self.search_term.value}':",
+                description=f"Found {len(items)} active listing(s) matching '{self.search_term.value}':",
                 color=0x00FF00
             )
 

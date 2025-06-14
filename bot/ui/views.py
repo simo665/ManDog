@@ -129,15 +129,26 @@ class MarketplaceView(discord.ui.View):
                 )
                 return
 
-            # Get all available items from the items database for this zone
-            available_items = await self.bot.db_manager.get_all_items_by_zone(self.zone)
+            # Get only items from active WTS listings in this zone
+            active_items = await self.bot.db_manager.execute_query(
+                """
+                SELECT DISTINCT item 
+                FROM listings 
+                WHERE guild_id = $1 AND zone = $2 AND listing_type = 'WTS' AND active = TRUE
+                ORDER BY item
+                """,
+                interaction.guild.id, self.zone
+            )
 
-            if not available_items:
+            if not active_items:
                 await interaction.response.send_message(
-                    f"❌ No items available for {self.zone.title()}.",
+                    f"❌ No active WTS listings found in {self.zone.title()}.",
                     ephemeral=True
                 )
                 return
+
+            # Extract item names from query results
+            available_items = [item['item'] for item in active_items]
 
             # Check if there are too many items for a dropdown (Discord limit is 25)
             if len(available_items) > 25:

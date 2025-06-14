@@ -776,7 +776,13 @@ class EventRatingModal(discord.ui.Modal):
     async def send_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int):
         """Send rating to admin channel for approval."""
         try:
-            admin_channel = interaction.guild.get_channel(admin_channel_id)
+            # Get guild first
+            guild = interaction.guild
+            if not guild:
+                logger.error("No guild found in interaction")
+                return
+
+            admin_channel = guild.get_channel(admin_channel_id)
             if not admin_channel:
                 logger.error(f"Admin channel {admin_channel_id} not found")
                 return
@@ -797,7 +803,7 @@ class EventRatingModal(discord.ui.Modal):
                 return
 
             event = event_data[0]
-            seller = interaction.guild.get_member(self.seller_id)
+            seller = guild.get_member(self.seller_id)
             rater = interaction.user
 
             # Create moderation embed
