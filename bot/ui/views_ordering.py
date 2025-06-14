@@ -281,20 +281,10 @@ class QuickRatingModal(discord.ui.Modal):
     async def send_event_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int, event_id: int):
         """Send event rating to admin channel for approval."""
         try:
-            guild = interaction.guild
-            if not guild:
-                logger.error("No guild found in interaction")
-                return
-
-            admin_channel = guild.get_channel(admin_channel_id)
-            if not admin_channel:
-                logger.error(f"Admin channel {admin_channel_id} not found")
-                return
-
-            # Get event details
+            # Get event details first to get guild_id
             event_data = await self.bot.db_manager.execute_query(
                 """
-                SELECT se.*, l.item, l.zone
+                SELECT se.*, l.item, l.zone, l.guild_id
                 FROM scheduled_events se
                 JOIN listings l ON se.listing_id = l.id
                 WHERE se.id = $1
@@ -307,6 +297,18 @@ class QuickRatingModal(discord.ui.Modal):
                 return
 
             event = event_data[0]
+            
+            # Get guild from bot using guild_id from event data
+            guild = self.bot.get_guild(event['guild_id'])
+            if not guild:
+                logger.error(f"Guild {event['guild_id']} not found")
+                return
+
+            admin_channel = guild.get_channel(admin_channel_id)
+            if not admin_channel:
+                logger.error(f"Admin channel {admin_channel_id} not found")
+                return
+
             seller = guild.get_member(self.rated_user_id)
             rater = interaction.user
 
@@ -926,21 +928,10 @@ class EventRatingModal(discord.ui.Modal):
     async def send_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int):
         """Send rating to admin channel for approval."""
         try:
-            # Get guild first
-            guild = interaction.guild
-            if not guild:
-                logger.error("No guild found in interaction")
-                return
-
-            admin_channel = guild.get_channel(admin_channel_id)
-            if not admin_channel:
-                logger.error(f"Admin channel {admin_channel_id} not found")
-                return
-
-            # Get event details
+            # Get event details first to get guild_id
             event_data = await self.bot.db_manager.execute_query(
                 """
-                SELECT se.*, l.item, l.zone
+                SELECT se.*, l.item, l.zone, l.guild_id
                 FROM scheduled_events se
                 JOIN listings l ON se.listing_id = l.id
                 WHERE se.id = $1
@@ -954,10 +945,15 @@ class EventRatingModal(discord.ui.Modal):
 
             event = event_data[0]
             
-            # Get guild from interaction
-            guild = interaction.guild
+            # Get guild from bot using guild_id from event data
+            guild = self.bot.get_guild(event['guild_id'])
             if not guild:
-                logger.error("No guild found in interaction")
+                logger.error(f"Guild {event['guild_id']} not found")
+                return
+
+            admin_channel = guild.get_channel(admin_channel_id)
+            if not admin_channel:
+                logger.error(f"Admin channel {admin_channel_id} not found")
                 return
                 
             seller = guild.get_member(self.seller_id)
