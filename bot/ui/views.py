@@ -80,20 +80,14 @@ class MarketplaceView(discord.ui.View):
     async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle previous page button."""
         try:
-            # Check if we can go to previous page
             if self.current_page > 0:
                 self.current_page -= 1
                 await self.update_embed(interaction)
             else:
-                # At first page, just acknowledge the interaction
-                await interaction.response.send_message("❌ Already at the first page.", ephemeral=True)
+                await interaction.response.defer()
         except Exception as e:
             logger.error(f"Error in prev button: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
-            except:
-                pass
+            await self.safe_defer(interaction)
 
     @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -107,15 +101,10 @@ class MarketplaceView(discord.ui.View):
                 self.current_page += 1
                 await self.update_embed(interaction)
             else:
-                # At last page, just acknowledge the interaction
-                await interaction.response.send_message("❌ Already at the last page.", ephemeral=True)
+                await interaction.response.defer()
         except Exception as e:
             logger.error(f"Error in next button: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ An error occurred.", ephemeral=True)
-            except:
-                pass
+            await self.safe_defer(interaction)
 
     @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", row=1)
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -246,7 +235,13 @@ class MarketplaceView(discord.ui.View):
             except:
                 pass
 
-    
+    async def safe_defer(self, interaction: discord.Interaction):
+        """Safely defer an interaction."""
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+        except:
+            pass
 
     async def start_listing_flow(self, interaction: discord.Interaction):
         """Start the listing creation flow."""
@@ -341,11 +336,6 @@ class MarketplaceView(discord.ui.View):
     async def update_embed(self, interaction: discord.Interaction):
         """Update the marketplace embed with current page."""
         try:
-            # Check if interaction is already responded to
-            if interaction.response.is_done():
-                logger.warning("Interaction already responded to")
-                return
-
             # Get current listings with queue data
             listings = await self.get_listings_with_queues(interaction.guild.id)
 
@@ -357,27 +347,11 @@ class MarketplaceView(discord.ui.View):
             # Update the view with current page
             new_view = MarketplaceView(self.bot, self.listing_type, self.zone, self.current_page)
 
-            # Try to edit the message
-            try:
-                await interaction.response.edit_message(embed=embed, view=new_view)
-            except discord.errors.InteractionResponded:
-                # If already responded, use followup
-                await interaction.edit_original_response(embed=embed, view=new_view)
+            await interaction.response.edit_message(embed=embed, view=new_view)
 
-        except discord.errors.NotFound:
-            logger.error("Interaction not found - likely expired")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ Interaction expired. Please try again.", ephemeral=True)
-            except:
-                pass
         except Exception as e:
             logger.error(f"Error updating embed: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ An error occurred while updating the page.", ephemeral=True)
-            except:
-                pass
+            await self.safe_defer(interaction)
 
     async def show_remove_options(self, interaction: discord.Interaction):
         """Show user's listings for removal."""
