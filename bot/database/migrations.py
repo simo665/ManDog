@@ -83,6 +83,7 @@ class MigrationManager:
             9: self.add_scheduled_events_table,
             10: self.add_event_confirmations_table,
             11: self.add_event_ratings_table,
+            12: self.add_guild_rating_configs_table,
         }
 
     async def migration_001_initial_schema(self):
@@ -275,6 +276,20 @@ class MigrationManager:
         """)
         
         logger.info("Event ratings table created successfully")
+
+    async def add_guild_rating_configs_table(self):
+        """Add guild_rating_configs table for rating moderation settings."""
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS guild_rating_configs (
+                guild_id BIGINT PRIMARY KEY,
+                admin_channel_id BIGINT,
+                low_rating_threshold INTEGER DEFAULT 3 CHECK (low_rating_threshold >= 1 AND low_rating_threshold <= 5),
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        """)
+        
+        logger.info("Guild rating configs table created successfully")
 
     async def populate_items_table(self):
         """Populate items table with initial marketplace data."""

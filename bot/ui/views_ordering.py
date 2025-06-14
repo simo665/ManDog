@@ -566,6 +566,120 @@ class EventRatingView(discord.ui.View):
             except:
                 pass
 
+class EventRatingModerationView(discord.ui.View):
+    """View for admin event rating moderation."""
+
+    def __init__(self, bot, event_id: int, rater_id: int, seller_id: int, rating: int, comment: str):
+        super().__init__(timeout=None)  # Persistent view
+        self.bot = bot
+        self.event_id = event_id
+        self.rater_id = rater_id
+        self.seller_id = seller_id
+        self.rating = rating
+        self.comment = comment
+
+    @discord.ui.button(label="✅ Approve Rating", style=discord.ButtonStyle.green)
+    async def approve_rating(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Approve the rating."""
+        try:
+            await interaction.response.defer()
+
+            # Save the approved rating
+            success = await self.bot.db_manager.execute_command(
+                """
+                INSERT INTO event_ratings (event_id, rater_id, seller_id, rating, comment, created_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (event_id, rater_id) DO NOTHING
+                """,
+                self.event_id, self.rater_id, self.seller_id, self.rating, self.comment, datetime.now(timezone.utc)
+            )
+
+            if success:
+                # Update user reputation
+                await self.update_seller_reputation()
+
+                # Update embed to show approval
+                embed = discord.Embed(
+                    title="✅ Rating Approved",
+                    description=f"Rating approved by {interaction.user.mention}",
+                    color=0x00FF00,
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                # Disable buttons
+                for item in self.children:
+                    item.disabled = True
+
+                await interaction.edit_original_response(embed=embed, view=self)
+
+                logger.info(f"Admin {interaction.user.id} approved rating for event {self.event_id}")
+
+        except Exception as e:
+            logger.error(f"Error approving event rating: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+    @discord.ui.button(label="❌ Reject Rating", style=discord.ButtonStyle.red)
+    async def reject_rating(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Reject the rating."""
+        try:
+            await interaction.response.defer()
+
+            # Update embed to show rejection
+            embed = discord.Embed(
+                title="❌ Rating Rejected",
+                description=f"Rating rejected by {interaction.user.mention}",
+                color=0xFF0000,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Disable buttons
+            for item in self.children:
+                item.disabled = True
+
+            await interaction.edit_original_response(embed=embed, view=self)
+
+            logger.info(f"Admin {interaction.user.id} rejected rating for event {self.event_id}")
+
+        except Exception as e:
+            logger.error(f"Error rejecting event rating: {e}")
+            try:
+                await interaction.followup.send("❌ An error occurred", ephemeral=True)
+            except:
+                pass
+
+    async def update_seller_reputation(self):
+        """Update seller's reputation after approved rating."""
+        try:
+            # Get all ratings for this seller
+            ratings = await self.bot.db_manager.execute_query(
+                "SELECT rating FROM event_ratings WHERE seller_id = $1",
+                self.seller_id
+            )
+
+            if ratings:
+                total_ratings = len(ratings)
+                avg_rating = sum(r['rating'] for r in ratings) / total_ratings
+
+                # Update user reputation
+                await self.bot.db_manager.execute_command(
+                    """
+                    INSERT INTO users (user_id, reputation_avg, reputation_count, updated_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET 
+                        reputation_avg = $2,
+                        reputation_count = $3,
+                        updated_at = $4
+                    """,
+                    self.seller_id, avg_rating, total_ratings, datetime.now(timezone.utc)
+                )
+
+        except Exception as e:
+            logger.error(f"Error updating seller reputation: {e}")
+
 class EventRatingModal(discord.ui.Modal):
     """Modal for submitting event ratings."""
 
@@ -595,7 +709,29 @@ class EventRatingModal(discord.ui.Modal):
 
             await interaction.response.defer()
 
-            # Store rating in database
+            # Get guild rating configuration
+            rating_config = await self.bot.db_manager.execute_query(
+                "SELECT admin_channel_id, low_rating_threshold FROM guild_rating_configs WHERE guild_id = $1",
+                interaction.guild.id
+            )
+
+            threshold = 3  # default threshold
+            admin_channel_id = None
+            if rating_config:
+                threshold = rating_config[0]['low_rating_threshold'] or 3
+                admin_channel_id = rating_config[0]['admin_channel_id']
+
+            # Check if rating needs admin approval
+            if self.rating < threshold and admin_channel_id:
+                # Send for admin approval instead of saving immediately
+                await self.send_rating_for_approval(interaction, comment, admin_channel_id)
+                await interaction.followup.send(
+                    f"⚠️ Your {self.rating}⭐ rating has been submitted for admin review due to the low score.",
+                    ephemeral=True
+                )
+                return
+
+            # Good rating or no admin config - save immediately
             success = await self.bot.db_manager.execute_command(
                 """
                 INSERT INTO event_ratings (event_id, rater_id, seller_id, rating, comment, created_at)
@@ -638,6 +774,65 @@ class EventRatingModal(discord.ui.Modal):
                 await interaction.followup.send("❌ An error occurred", ephemeral=True)
             except:
                 pass
+
+    async def send_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int):
+        """Send rating to admin channel for approval."""
+        try:
+            admin_channel = interaction.guild.get_channel(admin_channel_id)
+            if not admin_channel:
+                logger.error(f"Admin channel {admin_channel_id} not found")
+                return
+
+            # Get event details
+            event_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT se.*, l.item, l.zone
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.id = $1
+                """,
+                self.event_id
+            )
+
+            if not event_data:
+                logger.error(f"Event {self.event_id} not found")
+                return
+
+            event = event_data[0]
+            seller = interaction.guild.get_member(self.seller_id)
+            rater = interaction.user
+
+            # Create moderation embed
+            embed = discord.Embed(
+                title="⚠️ Rating Requires Moderation",
+                description="A low rating has been submitted and requires admin approval.",
+                color=0xFFA500,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(name="🎯 Item", value=event['item'], inline=True)
+            embed.add_field(name="📍 Zone", value=event['zone'], inline=True)
+            embed.add_field(name="⭐ Rating", value=f"{self.rating}/5", inline=True)
+            embed.add_field(name="👤 Rater", value=rater.mention, inline=True)
+            embed.add_field(name="👥 Seller", value=seller.mention if seller else f"User {self.seller_id}", inline=True)
+            embed.add_field(name="📝 Comment", value=comment or "No comment provided", inline=False)
+
+            # Create approval view
+            view = EventRatingModerationView(
+                self.bot, self.event_id, interaction.user.id, self.seller_id, 
+                self.rating, comment
+            )
+
+            await admin_channel.send(
+                content="🚨 **Rating Moderation Required**",
+                embed=embed,
+                view=view
+            )
+
+            logger.info(f"Sent event rating moderation request to {admin_channel.name} for event {self.event_id}")
+
+        except Exception as e:
+            logger.error(f"Error sending rating for approval: {e}")
 
 class TradeRatingView(discord.ui.View):
     """View for trade rating buttons."""

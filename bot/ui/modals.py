@@ -481,35 +481,71 @@ class QueueSelectView(discord.ui.View):
                 pass
 
     async def refresh_marketplace_embed(self, interaction: discord.Interaction):
-        """Refresh marketplace embed after queue change."""
+        """Refresh the marketplace embed in the channel."""
         try:
-            from bot.ui.views import MarketplaceView
-
+            # Get the specific marketplace channel for WTS in this zone
             channel_info = await self.bot.db_manager.execute_query(
-                "SELECT channel_id, message_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = 'WTS' AND zone = $2",
-                interaction.guild.id, self.zone
+                "SELECT channel_id, message_id FROM marketplace_channels WHERE guild_id = $1 AND listing_type = $2 AND zone = $3",
+                interaction.guild.id, "WTS", self.zone
             )
 
-            if channel_info:
-                channel_data = channel_info[0]
-                channel = interaction.guild.get_channel(channel_data['channel_id'])
+            if not channel_info:
+                logger.warning(f"No marketplace channel found for WTS in {self.zone}")
+                return
 
-                if channel:
-                    view = MarketplaceView(self.bot, 'WTS', self.zone, 0)
-                    listings = await view.get_listings_with_queues(interaction.guild.id)
+            channel_data = channel_info[0]
+            channel = interaction.guild.get_channel(channel_data['channel_id'])
 
-                    from bot.ui.embeds import MarketplaceEmbeds
-                    embeds = MarketplaceEmbeds()
-                    embed = embeds.create_marketplace_embed('WTS', self.zone, listings, 0)
-                    new_view = MarketplaceView(self.bot, 'WTS', self.zone, 0)
+            if not channel:
+                logger.warning(f"Channel {channel_data['channel_id']} not found")
+                return
 
-                    message_id = channel_data.get('message_id')
-                    if message_id:
-                        try:
-                            message = await channel.fetch_message(message_id)
-                            await message.edit(embed=embed, view=new_view)
-                        except discord.NotFound:
-                            pass
+            # Get updated listings with queue data
+            listings = await self.bot.db_manager.get_zone_listings(
+                interaction.guild.id, "WTS", self.zone
+            )
+
+            # Add queue data to each listing
+            for listing in listings:
+                queues = await self.bot.db_manager.get_listing_queues(listing['id'])
+                listing['queues'] = queues
+
+            # Create updated embed
+            from bot.ui.embeds import MarketplaceEmbeds
+            embeds = MarketplaceEmbeds()
+            embed = embeds.create_marketplace_embed(
+                "WTS", self.zone, listings, 0  # Reset to first page
+            )
+
+            # Create new view
+            from bot.ui.views import MarketplaceView
+            view = MarketplaceView(self.bot, "WTS", self.zone, 0)
+
+            # Try to find and update the marketplace message
+            message_id = channel_data.get('message_id')
+            if message_id:
+                try:
+                    message = await channel.fetch_message(message_id)
+                    await message.edit(embed=embed, view=view)
+                    return
+                except discord.NotFound:
+                    logger.warning(f"Marketplace message {message_id} not found")
+
+            # If message_id doesn't work, search for the message
+            async for message in channel.history(limit=50):
+                if (message.author == self.bot.user and 
+                    message.embeds and 
+                    message.embeds[0].title and 
+                    "WTS" in message.embeds[0].title and
+                    self.zone.lower() in message.embeds[0].title.lower()):
+                    await message.edit(embed=embed, view=view)
+
+                    # Update the stored message_id
+                    await self.bot.db_manager.execute_command(
+                        "UPDATE marketplace_channels SET message_id = $1 WHERE channel_id = $2",
+                        message.id, channel.id
+                    )
+                    break
 
         except Exception as e:
             logger.error(f"Error refreshing marketplace embed: {e}")
