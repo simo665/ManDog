@@ -54,6 +54,14 @@ class MandokBot(commands.Bot):
         else:
             logger.warning("MarketplaceCommands cog already loaded.")
 
+        # Add rating commands cog
+        from bot.commands.ratings import RatingCommands
+        if 'RatingCommands' not in self.cogs:
+            await self.add_cog(RatingCommands(self))
+            logger.info("Added RatingCommands cog")
+        else:
+            logger.warning("RatingCommands cog already loaded.")
+
         # Start background tasks only if not already running
         if not self.expiry_check.is_running():
             self.expiry_check.start()

@@ -82,6 +82,7 @@ class MigrationManager:
             8: self.add_items_table,
             9: self.add_scheduled_events_table,
             10: self.add_event_confirmations_table,
+            11: self.add_event_ratings_table,
         }
 
     async def migration_001_initial_schema(self):
@@ -246,6 +247,34 @@ class MigrationManager:
         """)
         
         logger.info("Event confirmations table created successfully")
+
+    async def add_event_ratings_table(self):
+        """Add event_ratings table for event rating system."""
+        await self.db_manager.execute_command("""
+            CREATE TABLE IF NOT EXISTS event_ratings (
+                id SERIAL PRIMARY KEY,
+                event_id INTEGER NOT NULL,
+                rater_id BIGINT NOT NULL,
+                seller_id BIGINT NOT NULL,
+                rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+                comment TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                FOREIGN KEY (event_id) REFERENCES scheduled_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (rater_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                FOREIGN KEY (seller_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                UNIQUE(event_id, rater_id)
+            )
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_event_ratings_event ON event_ratings(event_id)
+        """)
+        
+        await self.db_manager.execute_command("""
+            CREATE INDEX IF NOT EXISTS idx_event_ratings_seller ON event_ratings(seller_id)
+        """)
+        
+        logger.info("Event ratings table created successfully")
 
     async def populate_items_table(self):
         """Populate items table with initial marketplace data."""
