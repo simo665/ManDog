@@ -178,7 +178,7 @@ class QuickRatingModal(discord.ui.Modal):
         # Comment input
         label_text = f"Comment for {stars} rating (optional)"
         placeholder_text = "Share your experience with this seller..." if is_event_rating else "Share your experience with this trader..."
-        
+
         self.comment_input = discord.ui.TextInput(
             label=label_text,
             placeholder=placeholder_text,
@@ -199,11 +199,29 @@ class QuickRatingModal(discord.ui.Modal):
             if self.is_event_rating:
                 # Handle event rating (order_id is actually event_id)
                 event_id = int(self.order_id)
-                
+
+                # Get event data to get guild_id
+                event_data = await self.bot.db_manager.execute_query(
+                    """
+                    SELECT se.*, l.item, l.zone, l.guild_id
+                    FROM scheduled_events se
+                    JOIN listings l ON se.listing_id = l.id
+                    WHERE se.id = $1
+                    """,
+                    event_id
+                )
+
+                if not event_data:
+                    logger.error(f"Event {event_id} not found")
+                    await interaction.followup.send("❌ Event not found.", ephemeral=True)
+                    return
+
+                guild_id = event_data[0]['guild_id']
+
                 # Get guild rating configuration
                 rating_config = await self.bot.db_manager.execute_query(
                     "SELECT admin_channel_id, low_rating_threshold FROM guild_rating_configs WHERE guild_id = $1",
-                    interaction.guild.id
+                    guild_id
                 )
 
                 threshold = 3  # default threshold
@@ -298,7 +316,7 @@ class QuickRatingModal(discord.ui.Modal):
                 return
 
             event = event_data[0]
-            
+
             # Get guild from bot using guild_id from event data
             guild = self.bot.get_guild(event['guild_id'])
             if not guild:
@@ -642,11 +660,11 @@ class EventConfirmationView(discord.ui.View):
                 """,
                 self.event_id, user_id, self.role, confirmed, datetime.now(timezone.utc)
             )
-            
+
             # Check if we should schedule rating prompts (when both seller and at least one buyer confirm)
             if confirmed:
                 await self.check_and_schedule_rating_prompt()
-            
+
             return True
         except Exception as e:
             logger.error(f"Error storing event confirmation: {e}")
@@ -663,16 +681,16 @@ class EventConfirmationView(discord.ui.View):
                 """,
                 self.event_id
             )
-            
+
             seller_confirmed = any(c['role'] == 'seller' and c['confirmed'] for c in confirmations)
             buyer_confirmed = any(c['role'] == 'buyer' and c['confirmed'] for c in confirmations)
-            
+
             # If both seller and at least one buyer confirmed, schedule rating prompt
             if seller_confirmed and buyer_confirmed:
                 logger.info(f"Both parties confirmed for event {self.event_id}, scheduling rating prompt")
                 scheduler_service = self.bot.scheduler_service
                 asyncio.create_task(scheduler_service.schedule_rating_prompt(self.event_id, 10))
-                
+
         except Exception as e:
             logger.error(f"Error checking rating prompt schedule: {e}")
 
@@ -822,8 +840,7 @@ class EventRatingModerationView(discord.ui.View):
                     INSERT INTO users (user_id, reputation_avg, reputation_count, updated_at)
                     VALUES ($1, $2, $3, $4)
                     ON CONFLICT (user_id)
-                    DO UPDATE SET 
-                        reputation_avg = $2,
+                    DO UPDATE SET                        reputation_avg = $2,
                         reputation_count = $3,
                         updated_at = $4
                     """,
@@ -862,10 +879,27 @@ class EventRatingModal(discord.ui.Modal):
 
             await interaction.response.defer()
 
+            # Get event data to get guild_id
+            event_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT se.*, l.item, l.zone, l.guild_id
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.id = $1
+                """,
+                self.event_id
+            )
+
+            if not event_data:
+                logger.error(f"Event {self.event_id} not found")
+                await interaction.followup.send("❌ Event not found.", ephemeral=True)
+                return
+
+            guild_id = event_data[0]['guild_id']
             # Get guild rating configuration
             rating_config = await self.bot.db_manager.execute_query(
                 "SELECT admin_channel_id, low_rating_threshold FROM guild_rating_configs WHERE guild_id = $1",
-                interaction.guild.id
+                guild_id
             )
 
             threshold = 3  # default threshold
@@ -875,9 +909,9 @@ class EventRatingModal(discord.ui.Modal):
                 admin_channel_id = rating_config[0]['admin_channel_id']
 
             # Check if rating needs admin approval
-            if self.rating < threshold and admin_channel_id:
+            if self.rating < threshold and rating_config and rating_config[0]['admin_channel_id']:
                 # Send for admin approval instead of saving immediately
-                await self.send_rating_for_approval(interaction, comment, admin_channel_id)
+                await self.send_rating_for_approval(interaction, comment, admin_channel_id, guild_id)
                 await interaction.followup.send(
                     f"⚠️ Your {self.rating}⭐ rating has been submitted for admin review due to the low score.",
                     ephemeral=True
@@ -926,7 +960,7 @@ class EventRatingModal(discord.ui.Modal):
             except:
                 pass
 
-    async def send_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int):
+    async def send_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int, guild_id: int):
         """Send rating to admin channel for approval."""
         try:
             # Get event details first to get guild_id
@@ -945,18 +979,18 @@ class EventRatingModal(discord.ui.Modal):
                 return
 
             event = event_data[0]
-            
+
             # Get guild from bot using guild_id from event data
-            guild = self.bot.get_guild(event['guild_id'])
+            guild = self.bot.get_guild(guild_id)
             if not guild:
-                logger.error(f"Guild {event['guild_id']} not found")
+                logger.error(f"Guild {guild_id} not found")
                 return
 
             admin_channel = guild.get_channel(admin_channel_id)
             if not admin_channel:
                 logger.error(f"Admin channel {admin_channel_id} not found")
                 return
-                
+
             seller = guild.get_member(self.seller_id)
             rater = interaction.user
 
