@@ -333,13 +333,9 @@ class SchedulerService:
                 await asyncio.sleep(60)
 
     async def check_pending_events(self):
-        """Check for events that should trigger 30 minutes before event time."""
+        """Check for events that should trigger."""
         try:
-            # Get events that are 30 minutes away from their scheduled time
-            current_time = datetime.now(timezone.utc)
-            notification_time = current_time + timedelta(minutes=30)
-            
-            pending_events = await self.bot.db_manager.get_pending_events_for_notification(notification_time)
+            pending_events = await self.bot.db_manager.get_pending_events()
             
             for event in pending_events:
                 await self.trigger_event(event)
@@ -383,14 +379,10 @@ class SchedulerService:
             # First, remove the item from the seller's listing and refresh embed
             await self.remove_item_from_listing(listing_id, item_name, guild_id, zone)
 
-            # Get seller name for the notification
-            seller = guild.get_member(seller_id)
-            seller_name = seller.display_name if seller else "Unknown Seller"
-            
             # Create notification embed
             embed = discord.Embed(
-                title="⏰ Event Starting Soon",
-                description=f"The event for **{item_name}** by **{seller_name}** in **{zone.title()}** is starting in 30 minutes!\n\nPlease confirm your participation.",
+                title="⏳ Event Started",
+                description=f"The event for **{item_name}** in **{zone.title()}** has started!\n\nPlease confirm your participation.",
                 color=0xFFAA00,
                 timestamp=datetime.now(timezone.utc)
             )

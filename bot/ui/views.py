@@ -344,8 +344,10 @@ class MarketplaceView(discord.ui.View):
                 self.listing_type, self.zone, listings, self.current_page
             )
 
-            # Update the message with the same view instance (self)
-            await interaction.response.edit_message(embed=embed, view=self)
+            # Update the view with current page
+            new_view = MarketplaceView(self.bot, self.listing_type, self.zone, self.current_page)
+
+            await interaction.response.edit_message(embed=embed, view=new_view)
 
         except Exception as e:
             logger.error(f"Error updating embed: {e}")

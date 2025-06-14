@@ -3,11 +3,11 @@ Database models and schema definitions.
 """
 
 from typing import Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime
 
 class DatabaseSchema:
     """Database schema definitions."""
-
+    
     # Table creation SQL statements
     TABLES = {
         'guild_configs': """
@@ -19,7 +19,7 @@ class DatabaseSchema:
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             );
         """,
-
+        
         'marketplace_channels': """
             CREATE TABLE IF NOT EXISTS marketplace_channels (
                 id SERIAL PRIMARY KEY,
@@ -32,7 +32,7 @@ class DatabaseSchema:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
             );
         """,
-
+        
         'users': """
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY,
@@ -45,7 +45,7 @@ class DatabaseSchema:
                 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             );
         """,
-
+        
         'listings': """
             CREATE TABLE IF NOT EXISTS listings (
                 id SERIAL PRIMARY KEY,
@@ -67,7 +67,7 @@ class DatabaseSchema:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
             );
         """,
-
+        
         'reputation': """
             CREATE TABLE IF NOT EXISTS reputation (
                 id SERIAL PRIMARY KEY,
@@ -83,7 +83,7 @@ class DatabaseSchema:
                 UNIQUE(rater_id, target_id, listing_id)
             );
         """,
-
+        
         'ratings': """
             CREATE TABLE IF NOT EXISTS ratings (
                 id SERIAL PRIMARY KEY,
@@ -103,7 +103,7 @@ class DatabaseSchema:
                 FOREIGN KEY (admin_id) REFERENCES users(user_id) ON DELETE SET NULL
             );
         """,
-
+        
         'guild_rating_configs': """
             CREATE TABLE IF NOT EXISTS guild_rating_configs (
                 guild_id BIGINT PRIMARY KEY,
@@ -115,7 +115,7 @@ class DatabaseSchema:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
             );
         """,
-
+        
         'queues': """
             CREATE TABLE IF NOT EXISTS queues (
                 id SERIAL PRIMARY KEY,
@@ -131,7 +131,7 @@ class DatabaseSchema:
                 UNIQUE(user_id, listing_id)
             );
         """,
-
+        
         'transactions': """
             CREATE TABLE IF NOT EXISTS transactions (
                 id SERIAL PRIMARY KEY,
@@ -151,7 +151,7 @@ class DatabaseSchema:
                 FOREIGN KEY (buyer_id) REFERENCES users(user_id) ON DELETE CASCADE
             );
         """,
-
+        
         'admin_actions': """
             CREATE TABLE IF NOT EXISTS admin_actions (
                 id SERIAL PRIMARY KEY,
@@ -165,7 +165,7 @@ class DatabaseSchema:
                 FOREIGN KEY (guild_id) REFERENCES guild_configs(guild_id) ON DELETE CASCADE
             );
         """,
-
+        
         'item_suggestions': """
             CREATE TABLE IF NOT EXISTS item_suggestions (
                 id SERIAL PRIMARY KEY,
@@ -184,7 +184,7 @@ class DatabaseSchema:
                 FOREIGN KEY (admin_id) REFERENCES users(user_id) ON DELETE SET NULL
             );
         """,
-
+        
         'items': """
             CREATE TABLE IF NOT EXISTS items (
                 id SERIAL PRIMARY KEY,
@@ -197,7 +197,7 @@ class DatabaseSchema:
                 UNIQUE(zone, monster_name, item_name)
             );
         """,
-
+        
         'listing_queues': """
             CREATE TABLE IF NOT EXISTS listing_queues (
                 id SERIAL PRIMARY KEY,
@@ -210,7 +210,7 @@ class DatabaseSchema:
                 UNIQUE(listing_id, user_id, item_name)
             );
         """,
-
+        
         'scheduled_events': """
             CREATE TABLE IF NOT EXISTS scheduled_events (
                 id SERIAL PRIMARY KEY,
@@ -223,7 +223,7 @@ class DatabaseSchema:
                 FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
             );
         """,
-
+        
         'event_confirmations': """
             CREATE TABLE IF NOT EXISTS event_confirmations (
                 id SERIAL PRIMARY KEY,
@@ -237,7 +237,7 @@ class DatabaseSchema:
                 UNIQUE(event_id, user_id)
             );
         """,
-
+        
         'event_ratings': """
             CREATE TABLE IF NOT EXISTS event_ratings (
                 id SERIAL PRIMARY KEY,
@@ -254,7 +254,7 @@ class DatabaseSchema:
             );
         """
     }
-
+    
     # Index creation statements for performance
     INDEXES = [
         "CREATE INDEX IF NOT EXISTS idx_listings_guild_zone ON listings(guild_id, zone, listing_type);",
@@ -265,12 +265,12 @@ class DatabaseSchema:
         "CREATE INDEX IF NOT EXISTS idx_marketplace_channels_guild ON marketplace_channels(guild_id);",
         "CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);",
     ]
-
+    
     @classmethod
     def get_create_statements(cls) -> Dict[str, str]:
         """Get all table creation statements."""
         return cls.TABLES
-
+    
     @classmethod
     def get_index_statements(cls) -> list:
         """Get all index creation statements."""
@@ -278,7 +278,7 @@ class DatabaseSchema:
 
 class ListingModel:
     """Model for marketplace listings."""
-
+    
     def __init__(self, data: Dict[str, Any]):
         self.id = data.get('id')
         self.user_id = data.get('user_id')
@@ -294,7 +294,7 @@ class ListingModel:
         self.expires_at = data.get('expires_at')
         self.active = data.get('active', True)
         self.reminded = data.get('reminded', False)
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -313,7 +313,7 @@ class ListingModel:
             'active': self.active,
             'reminded': self.reminded
         }
-
+    
     def is_expired(self) -> bool:
         """Check if listing is expired."""
         if not self.expires_at:
@@ -322,7 +322,7 @@ class ListingModel:
 
 class UserModel:
     """Model for user data."""
-
+    
     def __init__(self, data: Dict[str, Any]):
         self.user_id = data.get('user_id')
         self.username = data.get('username')
@@ -332,7 +332,7 @@ class UserModel:
         self.timezone = data.get('timezone', 'UTC')
         self.created_at = data.get('created_at')
         self.updated_at = data.get('updated_at')
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -345,7 +345,7 @@ class UserModel:
             'created_at': self.created_at,
             'updated_at': self.updated_at
         }
-
+    
     def get_reputation_stars(self) -> str:
         """Get star representation of reputation."""
         full_stars = int(self.reputation_avg)
@@ -354,7 +354,7 @@ class UserModel:
 
 class ReputationModel:
     """Model for reputation ratings."""
-
+    
     def __init__(self, data: Dict[str, Any]):
         self.id = data.get('id')
         self.rater_id = data.get('rater_id')
@@ -363,7 +363,7 @@ class ReputationModel:
         self.rating = data.get('rating')
         self.comment = data.get('comment', '')
         self.created_at = data.get('created_at')
-
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -375,146 +375,3 @@ class ReputationModel:
             'comment': self.comment,
             'created_at': self.created_at
         }
-
-class ScheduledEventQueries:
-    """Scheduled event queries."""
-
-    def __init__(self, db):
-        """Initialize with database connection."""
-        self.db = db
-
-    async def create_event(self, listing_id, event_time):
-        """Create a scheduled event."""
-        return await self.db.execute(
-            """
-            INSERT INTO scheduled_events (listing_id, event_time)
-            VALUES ($1, $2)
-            """,
-            listing_id,
-            event_time
-        )
-
-    async def get_event(self, event_id):
-        """Get a scheduled event by ID."""
-        return await self.db.fetch_one(
-            """
-            SELECT * FROM scheduled_events WHERE id = $1
-            """,
-            event_id
-        )
-
-    async def get_events_by_listing(self, listing_id):
-        """Get scheduled events for a listing."""
-        return await self.db.fetch_all(
-            """
-            SELECT * FROM scheduled_events WHERE listing_id = $1
-            """,
-            listing_id
-        )
-
-    async def update_event_status(self, event_id, status):
-        """Update the status of a scheduled event."""
-        return await self.db.execute(
-            """
-            UPDATE scheduled_events SET status = $2 WHERE id = $1
-            """,
-            event_id,
-            status
-        )
-
-    async def confirm_seller(self, event_id):
-        """Confirm seller for a scheduled event."""
-        return await self.db.execute(
-            """
-            UPDATE scheduled_events SET seller_confirmed = TRUE WHERE id = $1
-            """,
-            event_id
-        )
-
-    async def add_participant(self, event_id, user_id):
-        """Add a participant to a scheduled event."""
-        return await self.db.execute(
-            """
-            UPDATE scheduled_events
-            SET participants = participants || $2::jsonb
-            WHERE id = $1
-            """,
-            event_id,
-            f'[{user_id}]'
-        )
-
-    async def remove_participant(self, event_id, user_id):
-        """Remove a participant from a scheduled event."""
-        return await self.db.execute(
-            """
-            UPDATE scheduled_events
-            SET participants = participants - $2
-            WHERE id = $1
-            """,
-            event_id,
-            user_id
-        )
-
-    async def get_participants(self, event_id):
-        """Get participants of a scheduled event."""
-        event = await self.get_event(event_id)
-        if event:
-            return event['participants']
-        return []
-
-    async def check_confirmation(self, event_id, user_id, role):
-        """Check if a user has confirmed participation."""
-        result = await self.db.fetch_one(
-            """
-            SELECT confirmed FROM event_confirmations
-            WHERE event_id = $1 AND user_id = $2 AND role = $3
-            """,
-            event_id,
-            user_id,
-            role
-        )
-        return result['confirmed'] if result else False
-
-    async def add_confirmation(self, event_id, user_id, role, confirmed):
-        """Add a confirmation record."""
-        await self.db.execute(
-            """
-            INSERT INTO event_confirmations (event_id, user_id, role, confirmed)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (event_id, user_id) DO UPDATE SET confirmed = $4
-            """,
-            event_id,
-            user_id,
-            role,
-            confirmed
-        )
-
-    async def get_pending_events(self):
-        """Get events that are ready to trigger."""
-        return await self.db.execute_query(
-            """
-            SELECT se.*, l.user_id, l.item, l.zone, l.guild_id
-            FROM scheduled_events se
-            JOIN listings l ON se.listing_id = l.id
-            WHERE se.status = 'pending' 
-              AND se.event_time <= $1
-              AND l.active = TRUE
-            """,
-            datetime.now(timezone.utc)
-        )
-
-    async def get_pending_events_for_notification(self, notification_time):
-        """Get events that should send 30-minute notification."""
-        return await self.db.execute_query(
-            """
-            SELECT se.*, l.user_id, l.item, l.zone, l.guild_id
-            FROM scheduled_events se
-            JOIN listings l ON se.listing_id = l.id
-            WHERE se.status = 'pending' 
-              AND se.event_time <= $1
-              AND se.event_time > $2
-              AND l.active = TRUE
-            """,
-            notification_time,
-            datetime.now(timezone.utc)
-        )
