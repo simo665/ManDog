@@ -489,10 +489,39 @@ class EventConfirmationView(discord.ui.View):
                 """,
                 self.event_id, user_id, self.role, confirmed, datetime.now(timezone.utc)
             )
+            
+            # Check if we should schedule rating prompts (when both seller and at least one buyer confirm)
+            if confirmed:
+                await self.check_and_schedule_rating_prompt()
+            
             return True
         except Exception as e:
             logger.error(f"Error storing event confirmation: {e}")
             return False
+
+    async def check_and_schedule_rating_prompt(self):
+        """Check if rating prompt should be scheduled and schedule it."""
+        try:
+            # Get all confirmations for this event
+            confirmations = await self.bot.db_manager.execute_query(
+                """
+                SELECT user_id, role, confirmed FROM event_confirmations 
+                WHERE event_id = $1 AND confirmed = TRUE
+                """,
+                self.event_id
+            )
+            
+            seller_confirmed = any(c['role'] == 'seller' and c['confirmed'] for c in confirmations)
+            buyer_confirmed = any(c['role'] == 'buyer' and c['confirmed'] for c in confirmations)
+            
+            # If both seller and at least one buyer confirmed, schedule rating prompt
+            if seller_confirmed and buyer_confirmed:
+                logger.info(f"Both parties confirmed for event {self.event_id}, scheduling rating prompt")
+                scheduler_service = self.bot.scheduler_service
+                asyncio.create_task(scheduler_service.schedule_rating_prompt(self.event_id, 10))
+                
+        except Exception as e:
+            logger.error(f"Error checking rating prompt schedule: {e}")
 
 class EventRatingView(discord.ui.View):
     """View for rating event seller."""
@@ -581,6 +610,10 @@ class EventRatingModal(discord.ui.Modal):
                 await self.bot.db_manager.add_reputation(
                     interaction.user.id, self.seller_id, None, self.rating, comment
                 )
+
+                # Check if all ratings are complete and send summary
+                scheduler_service = self.bot.scheduler_service
+                await scheduler_service.check_ratings_complete_and_send_summary(self.event_id)
 
                 stars = "⭐" * self.rating
                 if self.rating < 3:
