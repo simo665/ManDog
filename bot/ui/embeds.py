@@ -81,40 +81,63 @@ class MarketplaceEmbeds:
                     inline=False
                 )
             else:
-                # Add listings
-                for i, listing in enumerate(page_listings, start_idx + 1):
-                    if listing_type.upper() == "WTS":
-                        # New WTS format: 📂 [Monster] (X item)
-                        field_name = f"📂 {listing['subcategory']} ({listing['quantity']} item)"
+                if listing_type.upper() == "WTS":
+                    # Group WTS listings by monster (subcategory)
+                    grouped_listings = {}
+                    for listing in page_listings:
+                        monster = listing['subcategory']
+                        if monster not in grouped_listings:
+                            grouped_listings[monster] = []
+                        grouped_listings[monster].append(listing)
 
-                        # Format timestamp
-                        time_str = "No time set"
-                        if listing.get('scheduled_time'):
-                            timestamp = int(listing['scheduled_time'].timestamp())
-                            time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
+                    # Create fields for each monster group
+                    for monster, monster_listings in grouped_listings.items():
+                        # Header with monster name and total item count
+                        field_name = f"📂 {monster} ({len(monster_listings)} item{'s' if len(monster_listings) > 1 else ''})"
+                        
+                        # Build the field value with all items for this monster
+                        field_parts = []
+                        for i, listing in enumerate(monster_listings):
+                            # Format timestamp
+                            time_str = "No time set"
+                            if listing.get('scheduled_time'):
+                                timestamp = int(listing['scheduled_time'].timestamp())
+                                time_str = f"<t:{timestamp}:f> (<t:{timestamp}:R>)"
 
-                        # Format queue information
-                        queue_str = "No queue"
-                        if 'queues' in listing and listing['queues']:
-                            queue_users = []
-                            for item_name, users in listing['queues'].items():
-                                for user_id in users:
-                                    queue_users.append(f"<@{user_id}>")
-                            if queue_users:
-                                queue_str = " • ".join(queue_users)
+                            # Format queue information
+                            queue_str = "No queue"
+                            if 'queues' in listing and listing['queues']:
+                                queue_users = []
+                                for item_name, users in listing['queues'].items():
+                                    for user_id in users:
+                                        queue_users.append(f"<@{user_id}>")
+                                if queue_users:
+                                    queue_str = " • ".join(queue_users)
 
-                        # Notes
-                        notes_str = listing.get('notes', '').strip() or "No notes."
+                            # Notes
+                            notes_str = listing.get('notes', '').strip() or "No notes."
 
-                        # New WTS format
-                        field_value = (
-                            f"> 📦 Item: ╰┈➤ {listing['item']} by <@{listing['user_id']}>\n"
-                            f"> ⏰ Time: {time_str}\n"
-                            f"> 📝 Notes: {notes_str}\n"
-                            f"> 👥 Queue: {queue_str}"
+                            # Format this item
+                            item_text = (
+                                f"> 📦 Item: \n"
+                                f"> ╰┈➤ {listing['item']} by <@{listing['user_id']}>\n"
+                                f"> ⏰ Time: {time_str}\n"
+                                f"> 📝 Notes: {notes_str}\n"
+                                f"> 👥 Queue: {queue_str}"
+                            )
+                            field_parts.append(item_text)
+
+                        # Join all items with separator
+                        field_value = "\n· · ─ ·✶· ─ · ·\n".join(field_parts)
+                        
+                        embed.add_field(
+                            name=field_name,
+                            value=field_value,
+                            inline=False
                         )
-                    else:
-                        # WTB format (unchanged)
+                else:
+                    # WTB format (unchanged) - process individually
+                    for i, listing in enumerate(page_listings, start_idx + 1):
                         # Format timestamp
                         time_str = "No time set"
                         if listing.get('scheduled_time'):
@@ -140,11 +163,11 @@ class MarketplaceEmbeds:
                         if listing.get('notes'):
                             field_value += f"\n**Notes:** {listing['notes']}"
 
-                    embed.add_field(
-                        name=field_name,
-                        value=field_value,
-                        inline=False
-                    )
+                        embed.add_field(
+                            name=field_name,
+                            value=field_value,
+                            inline=False
+                        )
 
             # Add pagination info
             total_pages = max(1, (len(listings) + items_per_page - 1) // items_per_page)
