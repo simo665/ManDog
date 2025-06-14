@@ -742,10 +742,8 @@ class EventRatingModal(discord.ui.Modal):
             )
 
             if success:
-                # Update seller's reputation
-                await self.bot.db_manager.add_reputation(
-                    interaction.user.id, self.seller_id, None, self.rating, comment
-                )
+                # Update seller's reputation manually for event ratings
+                await self.update_seller_reputation()
 
                 # Check if all ratings are complete and send summary
                 scheduler_service = self.bot.scheduler_service
@@ -833,6 +831,36 @@ class EventRatingModal(discord.ui.Modal):
 
         except Exception as e:
             logger.error(f"Error sending rating for approval: {e}")
+
+    async def update_seller_reputation(self):
+        """Update seller's reputation after rating submission."""
+        try:
+            # Get all ratings for this seller
+            ratings = await self.bot.db_manager.execute_query(
+                "SELECT rating FROM event_ratings WHERE seller_id = $1",
+                self.seller_id
+            )
+
+            if ratings:
+                total_ratings = len(ratings)
+                avg_rating = sum(r['rating'] for r in ratings) / total_ratings
+
+                # Update user reputation
+                await self.bot.db_manager.execute_command(
+                    """
+                    INSERT INTO users (user_id, reputation_avg, reputation_count, updated_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET 
+                        reputation_avg = $2,
+                        reputation_count = $3,
+                        updated_at = $4
+                    """,
+                    self.seller_id, avg_rating, total_ratings, datetime.now(timezone.utc)
+                )
+
+        except Exception as e:
+            logger.error(f"Error updating seller reputation: {e}")
 
 class TradeRatingView(discord.ui.View):
     """View for trade rating buttons."""
