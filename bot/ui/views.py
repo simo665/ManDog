@@ -84,10 +84,15 @@ class MarketplaceView(discord.ui.View):
                 self.current_page -= 1
                 await self.update_embed(interaction)
             else:
-                await interaction.response.defer()
+                # Send ephemeral response when at first page
+                await interaction.response.send_message("📍 You're already on the first page!", ephemeral=True)
         except Exception as e:
             logger.error(f"Error in prev button: {e}")
-            await self.safe_defer(interaction)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ An error occurred", ephemeral=True)
+            except:
+                pass
 
     @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary, row=0)
     async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -101,10 +106,15 @@ class MarketplaceView(discord.ui.View):
                 self.current_page += 1
                 await self.update_embed(interaction)
             else:
-                await interaction.response.defer()
+                # Send ephemeral response when at last page
+                await interaction.response.send_message("📍 You're already on the last page!", ephemeral=True)
         except Exception as e:
             logger.error(f"Error in next button: {e}")
-            await self.safe_defer(interaction)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("❌ An error occurred", ephemeral=True)
+            except:
+                pass
 
     @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", row=1)
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
