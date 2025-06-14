@@ -131,17 +131,21 @@ class MandokBot(commands.Bot):
                     # Try to fetch the message to verify it exists
                     if message_id:
                         try:
-                            await channel.fetch_message(message_id)
+                            message = await channel.fetch_message(message_id)
                         except discord.NotFound:
                             # Message doesn't exist, skip this view
                             logger.warning(f"Message {message_id} not found in channel {channel_id}")
                             continue
 
-                    # Create and add persistent view
+                    # Create and add persistent view with proper custom IDs
                     from bot.ui.views import MarketplaceView
                     view = MarketplaceView(self, listing_type, zone, 0)
+                    
+                    # Add the view to the bot for persistent interactions
                     self.add_view(view)
                     view_count += 1
+                    
+                    logger.debug(f"Added persistent view for {listing_type} in {zone} (channel: {channel_id})")
 
                 except Exception as channel_error:
                     logger.warning(f"Error verifying channel {channel_id}: {channel_error}")
