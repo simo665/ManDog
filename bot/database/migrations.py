@@ -293,13 +293,6 @@ class MigrationManager:
             ('sky', 'Genbu', 'Speed Belt'),
             ('sky', 'Byakko', 'Byakko\'s Haidate'),
             ('sky', 'Byakko', 'Justice Badge'),
-            ('sky', 'All Sky Gods', 'Shura Zunari Kabuto'),
-            ('sky', 'All Sky Gods', 'Shura Haidate'),
-            ('sky', 'All Sky Gods', 'Shura Togi'),
-            ('sky', 'All Sky Gods', 'Haubergeon'),
-            ('sky', 'All Sky Gods', 'Hope Torque'),
-            ('sky', 'All Sky Gods', 'Faith Torque'),
-            ('sky', 'All Sky Gods', 'Fortitude Torque'),
             
             # Sea items
             ('sea', 'Jailer of Hope', 'Hope Torque'),
