@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 import asyncio
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -123,27 +124,27 @@ class OrderCompletionView(discord.ui.View):
         self.role = role
         self.other_party_id = other_party_id
 
-    @discord.ui.button(label="⭐ 1 Star", style=discord.ButtonStyle.danger, row=0)
+    @discord.ui.button(label="1 Star", style=discord.ButtonStyle.danger, row=0, emoji="⭐")
     async def rate_1_star(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Rate 1 star."""
         await self.handle_rating(interaction, 1)
 
-    @discord.ui.button(label="⭐⭐ 2 Stars", style=discord.ButtonStyle.danger, row=0)
+    @discord.ui.button(label="2 Stars", style=discord.ButtonStyle.danger, row=0, emoji="⭐")
     async def rate_2_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Rate 2 stars."""
         await self.handle_rating(interaction, 2)
 
-    @discord.ui.button(label="⭐⭐⭐ 3 Stars", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="3 Stars", style=discord.ButtonStyle.secondary, row=0, emoji="⭐")
     async def rate_3_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Rate 3 stars."""
         await self.handle_rating(interaction, 3)
 
-    @discord.ui.button(label="⭐⭐⭐⭐ 4 Stars", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="4 Stars", style=discord.ButtonStyle.success, row=1, emoji="⭐")
     async def rate_4_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Rate 4 stars."""
         await self.handle_rating(interaction, 4)
 
-    @discord.ui.button(label="⭐⭐⭐⭐⭐ 5 Stars", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="5 Stars", style=discord.ButtonStyle.success, row=1, emoji="⭐")
     async def rate_5_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Rate 5 stars."""
         await self.handle_rating(interaction, 5)
@@ -182,9 +183,9 @@ class QuickRatingModal(discord.ui.Modal):
             label=label_text,
             placeholder=placeholder_text,
             style=discord.TextStyle.paragraph,
-            min_length=0,
+            min_length=10,
             max_length=500,
-            required=False
+            required=True
         )
         self.add_item(self.comment_input)
 
@@ -272,7 +273,7 @@ class QuickRatingModal(discord.ui.Modal):
                     )
 
         except Exception as e:
-            logger.error(f"Error submitting rating: {e}")
+            logger.error(f"Error submitting rating: {traceback.format_exc()}")
             try:
                 await interaction.followup.send("❌ An error occurred", ephemeral=True)
             except:
@@ -447,7 +448,7 @@ class RatingModal(discord.ui.Modal):
                 )
 
         except Exception as e:
-            logger.error(f"Error submitting rating: {e}")
+            logger.error(f"Error submitting rating: {traceback.format_exc()}")
             try:
                 await interaction.followup.send("❌ An error occurred", ephemeral=True)
             except:
@@ -684,23 +685,23 @@ class EventRatingView(discord.ui.View):
         self.event_id = event_id
         self.seller_id = seller_id
 
-    @discord.ui.button(label="⭐ 1 Star", style=discord.ButtonStyle.danger, row=0)
+    @discord.ui.button(label="1 Star", style=discord.ButtonStyle.danger, row=0, emoji="⭐")
     async def rate_1_star(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_rating(interaction, 1)
 
-    @discord.ui.button(label="⭐⭐ 2 Stars", style=discord.ButtonStyle.danger, row=0)
+    @discord.ui.button(label="2 Stars", style=discord.ButtonStyle.danger, row=0, emoji="⭐")
     async def rate_2_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_rating(interaction, 2)
 
-    @discord.ui.button(label="⭐⭐⭐ 3 Stars", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="3 Stars", style=discord.ButtonStyle.secondary, row=0, emoji="⭐")
     async def rate_3_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_rating(interaction, 3)
 
-    @discord.ui.button(label="⭐⭐⭐⭐ 4 Stars", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="4 Stars", style=discord.ButtonStyle.success, row=1, emoji="⭐")
     async def rate_4_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_rating(interaction, 4)
 
-    @discord.ui.button(label="⭐⭐⭐⭐⭐ 5 Stars", style=discord.ButtonStyle.success, row=1)
+    @discord.ui.button(label="5 Stars", style=discord.ButtonStyle.success, row=1, emoji="⭐")
     async def rate_5_stars(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_rating(interaction, 5)
 
