@@ -168,6 +168,7 @@ class MarketplaceView(discord.ui.View):
                 await interaction.response.send_modal(modal)
             else:
                 # Show dropdown with available items and seller info
+                from bot.ui.modals import QueueSelectView
                 view = QueueSelectView(self.bot, active_listings, self.zone, available_items)
 
                 embed = discord.Embed(

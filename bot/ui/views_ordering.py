@@ -953,6 +953,13 @@ class EventRatingModal(discord.ui.Modal):
                 return
 
             event = event_data[0]
+            
+            # Get guild from interaction
+            guild = interaction.guild
+            if not guild:
+                logger.error("No guild found in interaction")
+                return
+                
             seller = guild.get_member(self.seller_id)
             rater = interaction.user
 
