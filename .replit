@@ -3,6 +3,7 @@ modules = ["python-3.11"]
 
 [nix]
 channel = "stable-24_05"
+packages = ["postgresql"]
 
 [unitTest]
 language = "python3"
@@ -13,3 +14,18 @@ requiredFiles = [".replit", "replit.nix"]
 [deployment]
 run = ["python3", "main.py"]
 deploymentTarget = "cloudrun"
+
+[workflows]
+
+[[workflows.workflow]]
+name = "Run"
+mode = "sequential"
+author = 43846110
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python setup_database.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py"
