@@ -453,7 +453,7 @@ class SchedulerService:
     async def schedule_rating_prompt(self, event_id: int, delay_seconds: int = 10):
         """Schedule rating prompt after delay."""
         try:
-            await asyncio.sleep(delay_seconds)
+            await asyncio.sleep(10)
             
             # Get event details
             event_data = await self.bot.db_manager.execute_query(
