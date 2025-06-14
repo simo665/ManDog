@@ -413,61 +413,94 @@ class QueueSelectView(discord.ui.View):
         self.wts_listings = wts_listings
         self.zone = zone
 
-        # Create dropdown with available items (max 25)
+        # Create dropdown with items grouped by seller (max 25)
         options = []
-        for item in available_items[:25]:
-            options.append(discord.SelectOption(label=item, value=item))
+        self.item_seller_map = {}  # Map option values to (item, listing_id)
+        
+        # Populate options from the provided listings
+        self._populate_options_from_listings(wts_listings, options)
 
-        self.item_select.options = options
-
-    @discord.ui.select(placeholder="Select an item to queue for...")
-    async def item_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        """Handle item selection for queue."""
+    def _populate_options_from_listings(self, listings: List[Dict[str, Any]], options: List[discord.SelectOption]):
+        """Populate dropdown options with items grouped by seller from listings."""
         try:
-            item_name = select.values[0]
+            option_count = 0
+            for listing in listings:
+                if option_count >= 25:  # Discord limit
+                    break
+                    
+                # Get seller display name
+                user = self.bot.get_user(listing['user_id'])
+                display_name = user.display_name if user else f"User {listing['user_id']}"
+                
+                # Create option label with item and seller
+                label = f"{listing['item']} – {display_name}"
+                if len(label) > 100:  # Discord limit
+                    label = label[:97] + "..."
+                
+                # Create unique value
+                value = f"{listing['id']}|{listing['item']}"
+                
+                options.append(discord.SelectOption(
+                    label=label,
+                    value=value,
+                    description=listing.get('notes', '')[:100] if listing.get('notes') else None
+                ))
+                
+                self.item_seller_map[value] = (listing['item'], listing['id'])
+                option_count += 1
+            
+            # Update the select options
+            if options:
+                self.item_select.options = options
+                
+        except Exception as e:
+            logger.error(f"Error populating queue options: {e}")
 
-            # Find sellers offering this item
-            sellers = await self.bot.db_manager.get_sellers_for_item(
-                interaction.guild.id, self.zone, item_name
-            )
-
-            if not sellers:
+    @discord.ui.select(placeholder="Select an item and seller to queue for...")
+    async def item_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        """Handle item and seller selection for queue."""
+        try:
+            selected_value = select.values[0]
+            
+            if selected_value not in self.item_seller_map:
                 await interaction.response.send_message(
-                    f"❌ No sellers currently offering **{item_name}** in {self.zone.title()}.",
+                    "❌ Invalid selection. Please try again.",
                     ephemeral=True
                 )
                 return
+            
+            item_name, listing_id = self.item_seller_map[selected_value]
+            
+            success = await self.bot.db_manager.add_to_queue(
+                listing_id, interaction.user.id, item_name
+            )
 
-            # If only one seller, add directly to queue
-            if len(sellers) == 1:
-                seller = sellers[0]
-                success = await self.bot.db_manager.add_to_queue(
-                    seller['id'], interaction.user.id, item_name
+            if success:
+                # Get seller info for confirmation message
+                seller_info = await self.bot.db_manager.execute_query(
+                    "SELECT user_id FROM listings WHERE id = $1",
+                    listing_id
                 )
-
-                if success:
+                
+                if seller_info:
+                    seller_id = seller_info[0]['user_id']
                     await interaction.response.send_message(
-                        f"✅ You have been added to the queue for **{item_name}** by <@{seller['user_id']}>",
+                        f"✅ You have been added to the queue for **{item_name}** by <@{seller_id}>",
                         ephemeral=True
                     )
-                    # Refresh the marketplace embed
-                    asyncio.create_task(self.refresh_marketplace_embed(interaction))
                 else:
                     await interaction.response.send_message(
-                        f"❌ Could not add you to the queue. You may already be queued for this item or you are the seller.",
+                        f"✅ You have been added to the queue for **{item_name}**!",
                         ephemeral=True
                     )
+                    
+                # Refresh the marketplace embed
+                asyncio.create_task(self.refresh_marketplace_embed(interaction))
             else:
-                # Multiple sellers, show selection
-                view = SellerSelectView(self.bot, sellers, self.zone, item_name)
-
-                embed = discord.Embed(
-                    title="👥 Select Seller",
-                    description=f"Multiple sellers are offering **{item_name}**. Choose one:",
-                    color=0x3B82F6
+                await interaction.response.send_message(
+                    f"❌ Could not add you to the queue. You may already be queued for this item or you are the seller.",
+                    ephemeral=True
                 )
-
-                await interaction.response.edit_message(embed=embed, view=view)
 
         except Exception as e:
             logger.error(f"Error in queue item selection: {e}")

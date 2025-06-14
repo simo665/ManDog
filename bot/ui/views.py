@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone
 from config.ffxi_data import ZONE_DATA
 # Import ordering views
@@ -67,7 +66,7 @@ class MarketplaceView(discord.ui.View):
         # Customize button labels based on type
         self.add_button.label = f"Add {listing_type}"
         self.remove_button.label = f"Remove {listing_type}"
-        
+
         # Add queue buttons for WTS embeds only
         if listing_type.upper() == "WTS":
             self.join_queue_button.custom_id = f"marketplace_queue_{listing_type}_{zone}"
@@ -139,6 +138,17 @@ class MarketplaceView(discord.ui.View):
                 """,
                 interaction.guild.id, self.zone
             )
+            
+            # Fetch all active listings to pass seller info to the QueueSelectView
+            active_listings = await self.bot.db_manager.execute_query(
+                """
+                SELECT id, item, user_id
+                FROM listings
+                WHERE guild_id = $1 AND zone = $2 AND listing_type = 'WTS' AND active = TRUE
+                ORDER BY item
+                """,
+                interaction.guild.id, self.zone
+            )
 
             if not active_items:
                 await interaction.response.send_message(
@@ -157,14 +167,13 @@ class MarketplaceView(discord.ui.View):
                 modal = QueueSearchModal(self.bot, self.zone)
                 await interaction.response.send_modal(modal)
             else:
-                # Use dropdown
-                from bot.ui.modals import QueueSelectView
-                view = QueueSelectView(self.bot, [], self.zone, available_items)
-                
+                # Show dropdown with available items and seller info
+                view = QueueSelectView(self.bot, active_listings, self.zone, available_items)
+
                 embed = discord.Embed(
-                    title="🔥 Join Queue",
-                    description=f"Select an item to queue for in {self.zone.title()}:",
-                    color=0xFF6B6B
+                    title="🛒 Join Queue",
+                    description=f"Select an item and seller to join the queue for in {self.zone.title()}:",
+                    color=0x3B82F6
                 )
 
                 await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
@@ -205,7 +214,7 @@ class MarketplaceView(discord.ui.View):
             # Create dropdown for leaving queues
             from bot.ui.modals import LeaveQueueView
             view = LeaveQueueView(self.bot, user_queues, self.zone)
-            
+
             embed = discord.Embed(
                 title="❌ Leave Queue",
                 description=f"Select which queue you want to leave in {self.zone.title()}:",
@@ -314,13 +323,13 @@ class MarketplaceView(discord.ui.View):
         listings = await self.bot.db_manager.get_zone_listings(
             guild_id, self.listing_type, self.zone
         )
-        
+
         # Add queue data to each listing
         for listing in listings:
             if self.listing_type.upper() == "WTS":
                 queues = await self.bot.db_manager.get_listing_queues(listing['id'])
                 listing['queues'] = queues
-        
+
         return listings
 
     async def update_embed(self, interaction: discord.Interaction):
@@ -564,18 +573,18 @@ class ItemSelectView(discord.ui.View):
                 sellers = await self.bot.db_manager.get_sellers_for_item(
                     interaction.guild.id, self.zone, item
                 )
-                
+
                 if sellers:
                     # Show seller selection for joining queue
                     from bot.ui.modals import SellerJoinView
                     view = SellerJoinView(self.bot, sellers, self.zone, item)
-                    
+
                     embed = discord.Embed(
                         title="🔗 Sellers Found",
                         description=f"Some sellers are already offering **{item}**. Do you want to join their queue?",
                         color=0x3B82F6
                     )
-                    
+
                     await interaction.response.edit_message(embed=embed, view=view)
                     return
 

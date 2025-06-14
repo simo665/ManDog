@@ -165,18 +165,22 @@ class OrderCompletionView(discord.ui.View):
 class QuickRatingModal(discord.ui.Modal):
     """Modal for submitting ratings with pre-selected stars."""
 
-    def __init__(self, bot, order_id: str, rated_user_id: int, rating: int):
+    def __init__(self, bot, order_id: str, rated_user_id: int, rating: int, is_event_rating: bool = False):
         stars = "⭐" * rating
         super().__init__(title=f"Rate {rating}/5 Stars")
         self.bot = bot
         self.order_id = order_id
         self.rated_user_id = rated_user_id
         self.rating = rating
+        self.is_event_rating = is_event_rating
 
         # Comment input
+        label_text = f"Comment for {stars} rating (optional)"
+        placeholder_text = "Share your experience with this seller..." if is_event_rating else "Share your experience with this trader..."
+        
         self.comment_input = discord.ui.TextInput(
-            label=f"Comment for {stars} rating (optional)",
-            placeholder="Share your experience with this trader...",
+            label=label_text,
+            placeholder=placeholder_text,
             style=discord.TextStyle.paragraph,
             min_length=0,
             max_length=500,
@@ -191,29 +195,81 @@ class QuickRatingModal(discord.ui.Modal):
 
             await interaction.response.defer()
 
-            ordering_service = self.bot.ordering_service
+            if self.is_event_rating:
+                # Handle event rating (order_id is actually event_id)
+                event_id = int(self.order_id)
+                
+                # Get guild rating configuration
+                rating_config = await self.bot.db_manager.execute_query(
+                    "SELECT admin_channel_id, low_rating_threshold FROM guild_rating_configs WHERE guild_id = $1",
+                    interaction.guild.id
+                )
 
-            success = await ordering_service.handle_rating_submission(
-                self.order_id, interaction.user.id, self.rated_user_id, self.rating, comment
-            )
+                threshold = 3  # default threshold
+                admin_channel_id = None
+                if rating_config:
+                    threshold = rating_config[0]['low_rating_threshold'] or 3
+                    admin_channel_id = rating_config[0]['admin_channel_id']
 
-            if success:
-                stars = "⭐" * self.rating
-                if self.rating < 3:
+                # Check if rating needs admin approval
+                if self.rating < threshold and admin_channel_id:
+                    # Send for admin approval
+                    await self.send_event_rating_for_approval(interaction, comment, admin_channel_id, event_id)
                     await interaction.followup.send(
-                        f"⚠️ Your {stars} rating has been submitted for admin review due to the low score.",
+                        f"⚠️ Your {self.rating}⭐ rating has been submitted for admin review due to the low score.",
                         ephemeral=True
                     )
-                else:
+                    return
+
+                # Good rating or no admin config - save immediately
+                success = await self.bot.db_manager.execute_command(
+                    """
+                    INSERT INTO event_ratings (event_id, rater_id, seller_id, rating, comment, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (event_id, rater_id) DO NOTHING
+                    """,
+                    event_id, interaction.user.id, self.rated_user_id, self.rating, comment, datetime.now(timezone.utc)
+                )
+
+                if success:
+                    # Update seller's reputation manually for event ratings
+                    await self.update_seller_reputation()
+
+                    stars = "⭐" * self.rating
                     await interaction.followup.send(
                         f"✅ Thank you for your {stars} rating! It has been recorded.",
                         ephemeral=True
                     )
+                else:
+                    await interaction.followup.send(
+                        "❌ You have already rated this event or an error occurred.",
+                        ephemeral=True
+                    )
             else:
-                await interaction.followup.send(
-                    "❌ Failed to submit rating. Please try again.",
-                    ephemeral=True
+                # Handle trade order rating
+                ordering_service = self.bot.ordering_service
+
+                success = await ordering_service.handle_rating_submission(
+                    self.order_id, interaction.user.id, self.rated_user_id, self.rating, comment
                 )
+
+                if success:
+                    stars = "⭐" * self.rating
+                    if self.rating < 3:
+                        await interaction.followup.send(
+                            f"⚠️ Your {stars} rating has been submitted for admin review due to the low score.",
+                            ephemeral=True
+                        )
+                    else:
+                        await interaction.followup.send(
+                            f"✅ Thank you for your {stars} rating! It has been recorded.",
+                            ephemeral=True
+                        )
+                else:
+                    await interaction.followup.send(
+                        "❌ Failed to submit rating. Please try again.",
+                        ephemeral=True
+                    )
 
         except Exception as e:
             logger.error(f"Error submitting rating: {e}")
@@ -221,6 +277,100 @@ class QuickRatingModal(discord.ui.Modal):
                 await interaction.followup.send("❌ An error occurred", ephemeral=True)
             except:
                 pass
+
+    async def send_event_rating_for_approval(self, interaction: discord.Interaction, comment: str, admin_channel_id: int, event_id: int):
+        """Send event rating to admin channel for approval."""
+        try:
+            guild = interaction.guild
+            if not guild:
+                logger.error("No guild found in interaction")
+                return
+
+            admin_channel = guild.get_channel(admin_channel_id)
+            if not admin_channel:
+                logger.error(f"Admin channel {admin_channel_id} not found")
+                return
+
+            # Get event details
+            event_data = await self.bot.db_manager.execute_query(
+                """
+                SELECT se.*, l.item, l.zone
+                FROM scheduled_events se
+                JOIN listings l ON se.listing_id = l.id
+                WHERE se.id = $1
+                """,
+                event_id
+            )
+
+            if not event_data:
+                logger.error(f"Event {event_id} not found")
+                return
+
+            event = event_data[0]
+            seller = guild.get_member(self.rated_user_id)
+            rater = interaction.user
+
+            # Create moderation embed
+            embed = discord.Embed(
+                title="⚠️ Rating Requires Moderation",
+                description="A low rating has been submitted and requires admin approval.",
+                color=0xFFA500,
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(name="🎯 Item", value=event['item'], inline=True)
+            embed.add_field(name="📍 Zone", value=event['zone'], inline=True)
+            embed.add_field(name="⭐ Rating", value=f"{self.rating}/5", inline=True)
+            embed.add_field(name="👤 Rater", value=rater.mention, inline=True)
+            embed.add_field(name="👥 Seller", value=seller.mention if seller else f"User {self.rated_user_id}", inline=True)
+            embed.add_field(name="📝 Comment", value=comment or "No comment provided", inline=False)
+
+            # Create approval view
+            view = EventRatingModerationView(
+                self.bot, event_id, interaction.user.id, self.rated_user_id, 
+                self.rating, comment
+            )
+
+            await admin_channel.send(
+                content="🚨 **Rating Moderation Required**",
+                embed=embed,
+                view=view
+            )
+
+            logger.info(f"Sent event rating moderation request to {admin_channel.name} for event {event_id}")
+
+        except Exception as e:
+            logger.error(f"Error sending event rating for approval: {e}")
+
+    async def update_seller_reputation(self):
+        """Update seller's reputation after rating submission."""
+        try:
+            # Get all ratings for this seller
+            ratings = await self.bot.db_manager.execute_query(
+                "SELECT rating FROM event_ratings WHERE seller_id = $1",
+                self.rated_user_id
+            )
+
+            if ratings:
+                total_ratings = len(ratings)
+                avg_rating = sum(r['rating'] for r in ratings) / total_ratings
+
+                # Update user reputation
+                await self.bot.db_manager.execute_command(
+                    """
+                    INSERT INTO users (user_id, reputation_avg, reputation_count, updated_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (user_id)
+                    DO UPDATE SET 
+                        reputation_avg = $2,
+                        reputation_count = $3,
+                        updated_at = $4
+                    """,
+                    self.rated_user_id, avg_rating, total_ratings, datetime.now(timezone.utc)
+                )
+
+        except Exception as e:
+            logger.error(f"Error updating seller reputation: {e}")
 
 class RatingModal(discord.ui.Modal):
     """Modal for submitting ratings."""
@@ -555,8 +705,8 @@ class EventRatingView(discord.ui.View):
     async def handle_rating(self, interaction: discord.Interaction, rating: int):
         """Handle star rating selection."""
         try:
-            # Open modal for optional comment
-            modal = EventRatingModal(self.bot, self.event_id, self.seller_id, rating)
+            # Open modal for optional comment (use QuickRatingModal for consistency)
+            modal = QuickRatingModal(self.bot, str(self.event_id), self.seller_id, rating, is_event_rating=True)
             await interaction.response.send_modal(modal)
 
         except Exception as e:
