@@ -55,11 +55,21 @@ class MarketplaceEmbeds:
     def create_marketplace_embed(self, listing_type: str, zone: str, listings: List[Dict[str, Any]], page: int = 0) -> discord.Embed:
         """Create marketplace embed with pagination."""
         try:
+            # Sort listings by scheduled time (ascending - soonest first)
+            def sort_key(listing):
+                scheduled_time = listing.get('scheduled_time')
+                if scheduled_time is None:
+                    # Put listings without time at the end
+                    return datetime.max.replace(tzinfo=timezone.utc)
+                return scheduled_time
+            
+            sorted_listings = sorted(listings, key=sort_key)
+            
             # Configuration
             items_per_page = 10
             start_idx = page * items_per_page
             end_idx = start_idx + items_per_page
-            page_listings = listings[start_idx:end_idx]
+            page_listings = sorted_listings[start_idx:end_idx]
 
             # Color and emoji based on type
             color = self.COLORS['wts'] if listing_type.upper() == 'WTS' else self.COLORS['wtb']
@@ -190,8 +200,8 @@ class MarketplaceEmbeds:
                         )
 
             # Add pagination info
-            total_pages = max(1, (len(listings) + items_per_page - 1) // items_per_page)
-            embed.set_footer(text=f"Page {page + 1}/{total_pages} • {len(listings)} total listings")
+            total_pages = max(1, (len(sorted_listings) + items_per_page - 1) // items_per_page)
+            embed.set_footer(text=f"Page {page + 1}/{total_pages} • {len(sorted_listings)} total listings")
 
             return embed
 
