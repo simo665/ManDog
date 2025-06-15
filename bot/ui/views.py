@@ -12,6 +12,7 @@ import logging
 from bot.ui.modals import ListingModal, QuantityNotesModal
 from bot.ui.embeds import MarketplaceEmbeds
 import asyncio
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,11 @@ class MarketplaceView(discord.ui.View):
 
             if self.current_page < max_pages - 1:
                 self.current_page += 1
-                await self.update_embed(interaction)
+                try:
+                    await self.update_embed(interaction)
+                except Exception:
+                    logger.error(f"Failed to update embed, error: {traceback.format_exc}")
+                    await interaction.response.send_message("❌ An error occurred while updating the embed", ephemeral=True)
             else:
                 # Send ephemeral response when at last page
                 await interaction.response.send_message("📍 You're already on the last page!", ephemeral=True)
