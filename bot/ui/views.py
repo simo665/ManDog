@@ -1,10 +1,6 @@
 from datetime import datetime, timezone
 from config.ffxi_data import ZONE_DATA
 # Import ordering views
-from bot.ui.views_ordering import (
-    OrderConfirmationView, OrderCompletionView,
-    MatchSelectionView, QueueNotificationView
-)
 import discord
 from discord.ext import commands
 from typing import Optional, List, Dict, Any
@@ -27,8 +23,8 @@ class SetupView(discord.ui.View):
     async def setup_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle setup button click."""
         try:
-            await interaction.response.defer(ephemeral=True)
-
+            button.disabled = True
+            await interaction.response.edit_message(view=self)
             # Import here to avoid circular imports
             from bot.commands.marketplace import MarketplaceCommands
 
@@ -59,8 +55,6 @@ class MarketplaceView(discord.ui.View):
         self.embeds = MarketplaceEmbeds()
 
         # Update custom_ids to include context
-        self.prev_button.custom_id = f"marketplace_prev_{listing_type}_{zone}"
-        self.next_button.custom_id = f"marketplace_next_{listing_type}_{zone}"
         self.add_button.custom_id = f"marketplace_add_{listing_type}_{zone}"
         self.remove_button.custom_id = f"marketplace_remove_{listing_type}_{zone}"
 
@@ -77,49 +71,6 @@ class MarketplaceView(discord.ui.View):
             self.remove_item(self.join_queue_button)
             self.remove_item(self.leave_queue_button)
 
-    @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary, row=0)
-    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle previous page button."""
-        try:
-            if self.current_page > 0:
-                self.current_page -= 1
-                await self.update_embed(interaction)
-            else:
-                # Send ephemeral response when at first page
-                await interaction.response.send_message("📍 You're already on the first page!", ephemeral=True)
-        except Exception as e:
-            logger.error(f"Error in prev button: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ An error occurred", ephemeral=True)
-            except:
-                pass
-
-    @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary, row=0)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        """Handle next page button."""
-        try:
-            # Get current listings to check if there's a next page
-            listings = await self.get_listings_with_queues(interaction.guild.id)
-            max_pages = max(1, (len(listings) + 9) // 10)  # 10 items per page
-
-            if self.current_page < max_pages - 1:
-                self.current_page += 1
-                try:
-                    await self.update_embed(interaction)
-                except Exception:
-                    logger.error(f"Failed to update embed, error: {traceback.format_exc}")
-                    await interaction.response.send_message("❌ An error occurred while updating the embed", ephemeral=True)
-            else:
-                # Send ephemeral response when at last page
-                await interaction.response.send_message("📍 You're already on the last page!", ephemeral=True)
-        except Exception as e:
-            logger.error(f"Error in next button: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("❌ An error occurred", ephemeral=True)
-            except:
-                pass
 
     @discord.ui.button(label="Add WTS", style=discord.ButtonStyle.green, emoji="➕", row=1)
     async def add_button(self, interaction: discord.Interaction, button: discord.ui.Button):
